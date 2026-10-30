@@ -1,0 +1,2 @@
+# Real environment files hold secrets and stay on the server; commit .env.example instead
+.env
