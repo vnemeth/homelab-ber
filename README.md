@@ -417,9 +417,8 @@ Open `http://192.168.2.30:5001` and create the admin account.
 
 ### 12. Set up Traefik with a wildcard certificate
 
-Traefik gets a Let's Encrypt certificate for `local.ber.nvcode.com` and
-`*.local.ber.nvcode.com` using the DNS challenge: it creates a temporary TXT record through
-the DreamHost API.
+Traefik gets a Let's Encrypt wildcard certificate for `*.local.ber.nvcode.com` using the
+DNS challenge: it creates a temporary TXT record through the DreamHost API.
 
 1. In the DreamHost panel, under *Advanced → API*, create an API key with the functions
    `dns-list_records`, `dns-add_record` and `dns-remove_record`.

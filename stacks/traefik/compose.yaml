@@ -14,7 +14,6 @@ services:
       - --entrypoints.websecure.address=:443
       - --entrypoints.websecure.http.tls.certresolver=letsencrypt
       - --entrypoints.websecure.http.tls.domains[0].main=*.local.ber.nvcode.com
-      - --entrypoints.websecure.http.tls.domains[0].sans=local.ber.nvcode.com
       - --certificatesresolvers.letsencrypt.acme.email=valentin@nvcode.com
       - --certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json
       - --certificatesresolvers.letsencrypt.acme.dnschallenge.provider=dreamhost
