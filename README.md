@@ -73,7 +73,9 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 
 - All services run in Docker containers.
 - Docker Compose stacks are managed with [Dockge](https://github.com/louislam/dockge), at
-  `https://dockge.local.ber.nvcode.com` (fallback: `http://192.168.2.30:5001`).
+  `https://dockge.local.ber.nvcode.com`, behind authentik. Dockge's own login is turned off.
+  Fallback if Traefik or authentik is down: `ssh -L 5001:localhost:5001 valentin@192.168.2.30`,
+  then `http://localhost:5001`.
 - Image tags follow one version line (e.g. `traefik:v3`, `postgres:16-alpine`), so Dockge's
   *Update* button pulls fixes within that line. New major versions, and new authentik
   releases, are deliberate tag changes in the repo.
@@ -101,7 +103,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 
 | Stack | Purpose | Port(s) | Notes |
 | ----- | ------- | ------- | ----- |
-| `dockge` | Manages the Docker Compose stacks | 5001 | `dockge.local.ber.nvcode.com`; data in `/srv/dockge` |
+| `dockge` | Manages the Docker Compose stacks | 5001 (localhost only) | `dockge.local.ber.nvcode.com`, behind authentik; data in `/srv/dockge` |
 | `traefik` | Reverse proxy and TLS | 80, 443 | Dashboard at `traefik.local.ber.nvcode.com`; certificates in `/srv/traefik/acme` |
 | `authentik` | Single sign-on and forward auth | — | `auth.local.ber.nvcode.com`; data in `/srv/authentik`. Memory-heavy: about 1–1.5 GB with PostgreSQL |
 
@@ -473,3 +475,35 @@ the Traefik forward-auth middleware `authentik@docker`.
 
    Open `https://auth.local.ber.nvcode.com/if/flow/initial-setup/` and set the password
    for the `akadmin` user.
+
+### 14. Put Dockge behind authentik
+
+One domain-level forward-auth provider covers every `*.local.ber.nvcode.com` service; a
+service is protected by adding the `authentik@docker` middleware to its Traefik router.
+
+In authentik's admin interface (`https://auth.local.ber.nvcode.com/if/admin/`):
+
+1. *Applications → Providers → Create → Proxy Provider*:
+   - Name: `local-forward-auth`
+   - Authorization flow: `default-provider-authorization-implicit-consent`
+   - Mode: *Forward auth (domain level)*
+   - Authentication URL: `https://auth.local.ber.nvcode.com`
+   - Cookie domain: `local.ber.nvcode.com`
+2. *Applications → Applications → Create*:
+   - Name: `Homelab`, slug: `homelab`
+   - Provider: `local-forward-auth`
+3. *Applications → Outposts*, edit *authentik Embedded Outpost*:
+   - Add `Homelab` to the selected applications.
+   - In the configuration, set `authentik_host: https://auth.local.ber.nvcode.com`.
+
+In Dockge, turn off its own login under *Settings → Security*. Then redeploy Dockge, which
+adds the middleware and limits port 5001 to localhost:
+
+```bash
+cd /opt/homelab-ber && git pull
+cd stacks/dockge && docker compose up -d
+```
+
+Check in a private browser window: `https://dockge.local.ber.nvcode.com` should redirect to
+the authentik login and back to Dockge after signing in, and `http://192.168.2.30:5001`
+should no longer respond.

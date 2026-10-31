@@ -2,9 +2,10 @@ services:
   dockge:
     image: louislam/dockge:1
     restart: unless-stopped
-    # Kept as a fallback, so Dockge stays reachable if Traefik is down
+    # Fallback if Traefik or authentik is down, reachable only via an SSH tunnel:
+    #   ssh -L 5001:localhost:5001 valentin@192.168.2.30
     ports:
-      - 5001:5001
+      - 127.0.0.1:5001:5001
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /srv/dockge/data:/app/data
@@ -18,6 +19,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.dockge.rule=Host(`dockge.local.ber.nvcode.com`)
       - traefik.http.routers.dockge.entrypoints=websecure
+      - traefik.http.routers.dockge.middlewares=authentik@docker
       - traefik.http.services.dockge.loadbalancer.server.port=5001
 
 networks:
