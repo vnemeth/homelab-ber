@@ -552,24 +552,47 @@ with authentik, not forward auth.
    docker compose up -d
    ```
 
-**authentik login (OIDC).** In authentik's admin interface:
+**authentik login (OIDC).** Beszel links the authentik login to the Beszel user with the
+same email address, so the authentik user's email must match. In authentik's admin
+interface:
 
-1. *Applications → Applications → Create with provider*, choose *OAuth2/OpenID Provider*:
+1. One-time, shared by all OIDC apps: authentik marks email addresses as unverified, and
+   Beszel ignores unverified ones (the login then fails with `{"email":"cannot be blank"}`).
+   Create *Customization → Property Mappings → Create → Scope Mapping*:
+   - Name: `OpenID email (verified)`, scope name: `email`
+   - Expression:
+
+     ```python
+     return {
+         "email": request.user.email,
+         "email_verified": True,
+     }
+     ```
+
+   This is safe as long as only the admin creates users and sets their email addresses.
+2. *Applications → Applications → Create with provider*, choose *OAuth2/OpenID Provider*:
    - Application name: `Beszel`, slug: `beszel`
    - Authorization flow: `default-provider-authorization-implicit-consent`
    - Client type: *Confidential*
    - Redirect URI (strict): `https://beszel.local.ber.nvcode.com/api/oauth2-redirect`
+   - Scopes: replace the default `email` mapping with `OpenID email (verified)`
    - Note the client ID and client secret.
-2. In Beszel's admin panel (`https://beszel.local.ber.nvcode.com/_/`), under *Settings*,
-   turn off *Hide collection create and edit controls*.
-3. Edit the `users` collection → *Options → OAuth2*: enable it and add an
+
+   The provider's *Preview* tab should show `"email_verified": true`.
+
+In Beszel's admin panel (`https://beszel.local.ber.nvcode.com/_/`):
+
+1. Under *Settings*, turn off *Hide collection create and edit controls*.
+2. Edit the `users` collection → *Options → OAuth2*: enable it and add an
    *OpenID Connect* provider:
    - Display name: `authentik`
-   - Client ID and client secret from step 1
+   - Client ID and client secret from authentik
    - Auth URL: `https://auth.local.ber.nvcode.com/application/o/authorize/`
    - Token URL: `https://auth.local.ber.nvcode.com/application/o/token/`
    - User info URL: `https://auth.local.ber.nvcode.com/application/o/userinfo/`
-4. Turn *Hide collection create and edit controls* back on.
-5. Log out and back in with *authentik*. Once that works, set
-   `DISABLE_PASSWORD_AUTH: "true"` in [`stacks/beszel/compose.yaml`](stacks/beszel/compose.yaml)
-   and redeploy, so only authentik logins are possible.
+3. Turn *Hide collection create and edit controls* back on.
+4. Log out and back in with *authentik*.
+
+Password login is turned off in the stack (`DISABLE_PASSWORD_AUTH: "true"`), so only
+authentik logins work. On a fresh setup, create the first user (step 3 above) and set up
+the OIDC login with `DISABLE_PASSWORD_AUTH: "false"`, then switch it back.
