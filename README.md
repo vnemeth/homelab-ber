@@ -40,7 +40,8 @@ full-disk encryption, so the server comes back up unattended after a power cut.
 | `/data/home` | `/home` |
 | `/data/srv`  | `/srv`  |
 
-- **`/`** holds the OS. The Dockge stacks directory (`/opt/stacks`) lives here too.
+- **`/`** holds the OS. The clone of this repo (`/opt/homelab-ber`), whose `stacks/`
+  folder is Dockge's stacks directory, lives here too.
 - **`/var/lib/docker`** holds images, container layers and logs, which can all be
   re-downloaded. Keeping them on their own volume means they can't fill up the OS.
   `docker system prune` frees space here.
@@ -54,12 +55,18 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 
 - Connection: Wi-Fi on the onboard Intel adapter (`wlo1`), to a Telekom Speedport router
 - IPv4: `192.168.2.30`, a DHCP reservation for the adapter's MAC address on the router
-- DNS, remote access: _TBD_
+- Remote desktop: RDP via xrdp on port 3389, home network only
+- DNS: _TBD_
 
 ## Container platform
 
 - All services run in Docker containers.
-- Docker Compose stacks are managed with [Dockge](https://github.com/louislam/dockge).
+- Docker Compose stacks are managed with [Dockge](https://github.com/louislam/dockge), at
+  `http://192.168.2.30:5001`.
+- This repo is cloned to `/opt/homelab-ber` on the server, and Dockge's stacks directory
+  is its `stacks/` folder, so stacks edited in Dockge show up in `git status`. Dockge runs
+  as root, so files it creates are owned by root; fix with
+  `sudo chown -R valentin:valentin /opt/homelab-ber` before committing.
 - Each stack is a folder under [`stacks/`](stacks/) containing a `compose.yaml` and,
   where needed, a `.env.example`. To deploy, copy it to `.env` on the server and fill in
   the real values. `.env` files are git-ignored and never committed.
@@ -78,7 +85,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 
 | Stack | Purpose | Port(s) | Notes |
 | ----- | ------- | ------- | ----- |
-| _none yet_ |    |         |       |
+| `dockge` | Manages the Docker Compose stacks | 5001 | Data in `/srv/dockge` |
 
 ## Setup log
 
@@ -243,3 +250,138 @@ sudo apt autoremove -o APT::AutoRemove::RecommendsImportant=false
 
 Run the `apt-mark manual` command above first, so the cleanup doesn't remove the
 networking or desktop packages.
+
+### 7. Set up remote desktop (xrdp)
+
+xrdp serves the Xfce desktop over RDP on port 3389. Each RDP connection gets its own
+desktop session. With recommends turned off, the Xorg backend `xorgxrdp` must be listed
+explicitly:
+
+```bash
+sudo apt install xrdp xorgxrdp
+sudo apt-mark manual xrdp xorgxrdp
+
+# Start Xfce for RDP sessions
+echo xfce4-session > ~/.xsession
+
+# Give xrdp access to its TLS certificate
+sudo adduser xrdp ssl-cert
+sudo systemctl enable --now xrdp
+sudo systemctl restart xrdp
+
+# Check it's listening
+sudo ss -tlnp | grep 3389
+```
+
+Connect from the Mac with **Windows App** (App Store) to `192.168.2.30`, as `valentin`.
+
+- Log out of the local Xfce session first. If `valentin` is still logged in on the
+  machine's own screen, the RDP session opens to a black screen and closes.
+- RDP is for the home network only. Port 3389 is not forwarded on the router.
+
+### 8. Install Google Chrome
+
+Google's `.deb` also adds Google's apt repository, so Chrome updates with
+`sudo apt upgrade`:
+
+```bash
+cd /tmp
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install ./google-chrome-stable_current_amd64.deb
+rm google-chrome-stable_current_amd64.deb
+```
+
+Chrome is memory-heavy for an 8 GB host shared with Docker; close it when not in use.
+
+### 9. Install Docker Engine and Compose
+
+From Docker's own apt repository. With recommends turned off, the helpers Docker needs
+are listed explicitly:
+
+```bash
+sudo apt install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+sudo apt update
+sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin \
+  docker-compose-plugin iptables apparmor pigz git
+```
+
+Cap container logs, so they can't fill the Docker volume:
+
+```bash
+sudo tee /etc/docker/daemon.json <<'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+sudo systemctl restart docker
+```
+
+Let `valentin` use Docker without `sudo` (log out and back in afterwards):
+
+```bash
+sudo usermod -aG docker valentin
+```
+
+Check:
+
+```bash
+docker run --rm hello-world
+docker compose version
+docker info | grep -E 'Docker Root Dir|Logging Driver'   # /var/lib/docker, json-file
+```
+
+### 10. Clone this repo to `/opt/homelab-ber`
+
+The server accesses GitHub with a deploy key that only grants access to this repo:
+
+```bash
+ssh-keygen -t ed25519 -C "lab deploy key for homelab-ber" -f ~/.ssh/homelab-ber -N ""
+cat ~/.ssh/homelab-ber.pub
+```
+
+Add the public key on GitHub under the repo's *Settings → Deploy keys*, with
+*Allow write access* ticked. Then point SSH at the key for GitHub by adding to
+`~/.ssh/config` (mode `600`):
+
+```
+Host github.com
+  IdentityFile ~/.ssh/homelab-ber
+  IdentitiesOnly yes
+```
+
+Clone the repo:
+
+```bash
+sudo mkdir /opt/homelab-ber
+sudo chown valentin:valentin /opt/homelab-ber
+git clone git@github.com:vnemeth/homelab-ber.git /opt/homelab-ber
+cd /opt/homelab-ber
+git config user.name "Valentin Nemeth"
+git config user.email "valentin@nvcode.com"
+```
+
+### 11. Start Dockge
+
+Dockge's own stack is [`stacks/dockge/compose.yaml`](stacks/dockge/compose.yaml). Start it
+once from the command line; after that it shows up in its own UI:
+
+```bash
+sudo mkdir -p /srv/dockge/data
+cd /opt/homelab-ber/stacks/dockge
+docker compose up -d
+```
+
+Open `http://192.168.2.30:5001` and create the admin account.
