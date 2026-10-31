@@ -74,6 +74,9 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 - All services run in Docker containers.
 - Docker Compose stacks are managed with [Dockge](https://github.com/louislam/dockge), at
   `https://dockge.local.ber.nvcode.com` (fallback: `http://192.168.2.30:5001`).
+- Image tags follow one version line (e.g. `traefik:v3`, `postgres:16-alpine`), so Dockge's
+  *Update* button pulls fixes within that line. New major versions, and new authentik
+  releases, are deliberate tag changes in the repo.
 - [Traefik](https://traefik.io/) is the reverse proxy for all web interfaces. Stacks join
   the external Docker network `proxy` and are routed by Docker labels.
 - This repo is cloned to `/opt/homelab-ber` on the server, and Dockge's stacks directory

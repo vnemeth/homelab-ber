@@ -1,6 +1,6 @@
 services:
   dockge:
-    image: louislam/dockge:1.5.0
+    image: louislam/dockge:1
     restart: unless-stopped
     # Kept as a fallback, so Dockge stays reachable if Traefik is down
     ports:

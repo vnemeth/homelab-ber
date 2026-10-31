@@ -24,7 +24,11 @@ Configuration for a single-node homelab in Berlin:
 
 - **One service (or tightly coupled group) per stack.** Folder names are lowercase and
   hyphenated, and match the Dockge stack name.
-- **Pin image versions** to a specific tag rather than `latest`, so upgrades are deliberate.
+- **Use image tags that follow one version line**, e.g. `traefik:v3`, `louislam/dockge:1`,
+  `postgres:16-alpine`. Updates within that line come in through Dockge's *Update* button;
+  moving to a new major version (or, for apps that require stepwise upgrades like
+  authentik, a new release) is a deliberate tag change. Never use `latest`, and never let
+  a database image float across major versions.
 - **Mind the resources.** The host has 8 GB RAM and 256 GB disk shared by all stacks and the
   desktop. Prefer lightweight images, and call out services that are memory- or disk-heavy.
 - **Keep the README in sync.** When adding, removing, or changing a stack, update the
