@@ -34,8 +34,7 @@ services:
       - traefik.http.routers.dashboard.rule=Host(`traefik.local.ber.nvcode.com`)
       - traefik.http.routers.dashboard.entrypoints=websecure
       - traefik.http.routers.dashboard.service=api@internal
-      - traefik.http.routers.dashboard.middlewares=dashboard-auth
-      - traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_USERS}
+      - traefik.http.routers.dashboard.middlewares=authentik@docker
 
 networks:
   proxy:

@@ -104,7 +104,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | Stack | Purpose | Port(s) | Notes |
 | ----- | ------- | ------- | ----- |
 | `dockge` | Manages the Docker Compose stacks | 5001 (localhost only) | `dockge.local.ber.nvcode.com`, behind authentik; data in `/srv/dockge` |
-| `traefik` | Reverse proxy and TLS | 80, 443 | Dashboard at `traefik.local.ber.nvcode.com`; certificates in `/srv/traefik/acme` |
+| `traefik` | Reverse proxy and TLS | 80, 443 | Dashboard at `traefik.local.ber.nvcode.com`, behind authentik; certificates in `/srv/traefik/acme` |
 | `authentik` | Single sign-on and forward auth | — | `auth.local.ber.nvcode.com`; data in `/srv/authentik`. Memory-heavy: about 1–1.5 GB with PostgreSQL |
 
 ## Setup log
@@ -407,15 +407,22 @@ git config user.email "valentin@nvcode.com"
 ### 11. Start Dockge
 
 Dockge's own stack is [`stacks/dockge/compose.yaml`](stacks/dockge/compose.yaml). Start it
-once from the command line; after that it shows up in its own UI:
+once from the command line; after that it shows up in its own UI. It joins the shared
+`proxy` network, which Traefik and other web services use too:
 
 ```bash
+docker network create proxy
 sudo mkdir -p /srv/dockge/data
 cd /opt/homelab-ber/stacks/dockge
 docker compose up -d
 ```
 
-Open `http://192.168.2.30:5001` and create the admin account.
+Port 5001 only listens on localhost. Until Traefik and authentik are set up, reach Dockge
+through an SSH tunnel from the Mac and create the admin account:
+
+```bash
+ssh -L 5001:localhost:5001 valentin@192.168.2.30   # then open http://localhost:5001
+```
 
 ### 12. Set up Traefik with a wildcard certificate
 
@@ -424,31 +431,30 @@ DNS challenge: it creates a temporary TXT record through the DreamHost API.
 
 1. In the DreamHost panel, under *Advanced → API*, create an API key with the functions
    `dns-list_records`, `dns-add_record` and `dns-remove_record`.
-2. Create the shared Docker network and the certificate directory:
+2. Create the certificate directory:
 
    ```bash
-   docker network create proxy
    sudo mkdir -p /srv/traefik/acme
    ```
 
 3. Create `stacks/traefik/.env` from [`.env.example`](stacks/traefik/.env.example) and
-   fill in the API key and the dashboard login:
+   fill in the API key:
 
    ```bash
    cd /opt/homelab-ber/stacks/traefik
    cp .env.example .env
-   docker run --rm httpd:2.4-alpine htpasswd -nbB valentin 'your-password'   # dashboard login
    ```
 
-4. Start Traefik, then redeploy Dockge so it joins the `proxy` network:
+4. Start Traefik:
 
    ```bash
    docker compose up -d
    docker compose logs -f    # wait for the certificate; DreamHost DNS can take minutes
-   cd ../dockge && docker compose up -d
    ```
 
 The certificate is stored in `/srv/traefik/acme/acme.json` and renewed automatically.
+The dashboard at `traefik.local.ber.nvcode.com` is protected by authentik, so it only becomes
+reachable after step 14.
 
 ### 13. Set up authentik
 
@@ -476,7 +482,7 @@ the Traefik forward-auth middleware `authentik@docker`.
    Open `https://auth.local.ber.nvcode.com/if/flow/initial-setup/` and set the password
    for the `akadmin` user.
 
-### 14. Put Dockge behind authentik
+### 14. Put Dockge and the Traefik dashboard behind authentik
 
 One domain-level forward-auth provider covers every `*.local.ber.nvcode.com` service; a
 service is protected by adding the `authentik@docker` middleware to its Traefik router.
@@ -494,16 +500,16 @@ In authentik's admin interface (`https://auth.local.ber.nvcode.com/if/admin/`):
    - Provider: `local-forward-auth`
 3. *Applications → Outposts*, edit *authentik Embedded Outpost*:
    - Add `Homelab` to the selected applications.
-   - In the configuration, set `authentik_host: https://auth.local.ber.nvcode.com`.
+   - Under *Advanced settings → Configuration*, set
+     `authentik_host: https://auth.local.ber.nvcode.com/`. Without it, the outpost shows
+     "authentik Domain is not configured" and logins don't work.
 
-In Dockge, turn off its own login under *Settings → Security*. Then redeploy Dockge, which
-adds the middleware and limits port 5001 to localhost:
+In Dockge, turn off its own login under *Settings → Security*. Dockge's and the Traefik
+dashboard's routers already use the `authentik@docker` middleware, and Dockge's port 5001
+only listens on localhost.
 
-```bash
-cd /opt/homelab-ber && git pull
-cd stacks/dockge && docker compose up -d
-```
+Check in a private browser window:
 
-Check in a private browser window: `https://dockge.local.ber.nvcode.com` should redirect to
-the authentik login and back to Dockge after signing in, and `http://192.168.2.30:5001`
-should no longer respond.
+- `https://dockge.local.ber.nvcode.com` and `https://traefik.local.ber.nvcode.com` redirect
+  to the authentik login, and back after signing in.
+- `http://192.168.2.30:5001` doesn't respond.

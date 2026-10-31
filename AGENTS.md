@@ -48,6 +48,10 @@ Configuration for a single-node homelab in Berlin:
   ```
   The `websecure` entrypoint applies the `*.local.ber.nvcode.com` wildcard certificate, so
   routers don't set TLS options themselves.
+- **Protect web interfaces with authentik.** Add
+  `traefik.http.routers.<name>.middlewares=authentik@docker` to the router, unless the app
+  supports OIDC itself (then ask the user which to use). Never add it to authentik's own
+  router.
 - **Each new hostname needs a DNS record.** The user adds a CNAME
   `<name>.local.ber.nvcode.com` → `lab.local.ber.nvcode.com` at DreamHost. Remind them, and
   add it to the DNS table in `README.md`.
