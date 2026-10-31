@@ -1,4 +1,4 @@
-# frpc tunnels to the remote frps server. Values in {{ .Envs.* }} come from the stack's .env.
+# frpc tunnels to the remote frps server. The .Envs values come from the stack's .env.
 serverAddr = "{{ .Envs.FRPS_ADDR }}"
 serverPort = 7000
 
