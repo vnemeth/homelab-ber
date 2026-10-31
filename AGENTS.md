@@ -52,6 +52,9 @@ Configuration for a single-node homelab in Berlin:
   `traefik.http.routers.<name>.middlewares=authentik@docker` to the router, unless the app
   supports OIDC itself (then ask the user which to use). Never add it to authentik's own
   router.
+- **OIDC apps must be on the `proxy` network.** Their server calls authentik's token
+  endpoint at `auth.local.ber.nvcode.com`. Inside Docker that name doesn't resolve through
+  external DNS; Traefik carries it as a network alias on `proxy`, so it only works there.
 - **Each new hostname needs a DNS record.** The user adds a CNAME
   `<name>.local.ber.nvcode.com` → `lab.local.ber.nvcode.com` at DreamHost. Remind them, and
   add it to the DNS table in `README.md`.

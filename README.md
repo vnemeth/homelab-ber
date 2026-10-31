@@ -82,6 +82,9 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
   releases, are deliberate tag changes in the repo.
 - [Traefik](https://traefik.io/) is the reverse proxy for all web interfaces. Stacks join
   the external Docker network `proxy` and are routed by Docker labels.
+- Containers can't resolve `*.local.ber.nvcode.com` through external DNS. Traefik
+  carries `auth.local.ber.nvcode.com` as a network alias on `proxy`, so apps using
+  authentik's OIDC login reach its token endpoint through Traefik.
 - This repo is cloned to `/opt/homelab-ber` on the server, and Dockge's stacks directory
   is its `stacks/` folder, so stacks edited in Dockge show up in `git status`. Dockge runs
   as root, so files it creates are owned by root; fix with

@@ -28,7 +28,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /srv/traefik/acme:/acme
     networks:
-      - proxy
+      proxy:
+        # Containers resolve authentik's hostname to Traefik directly, so OIDC apps can
+        # reach the token endpoint without going through external DNS
+        aliases:
+          - auth.local.ber.nvcode.com
     labels:
       - traefik.enable=true
       - traefik.http.routers.dashboard.rule=Host(`traefik.local.ber.nvcode.com`)
