@@ -672,12 +672,12 @@ The tunnels are defined in [`stacks/frpc/frpc.toml`](stacks/frpc/frpc.toml); the
 address and Home Assistant's address come from `.env`. The connection uses mutual TLS.
 
 1. Put the client certificate, its key and the CA certificate in `/srv/frpc/certs`, as
-   `frpc.crt`, `frpc.key` and `frp.ca.crt`:
+   `ber.frpc.crt`, `ber.frpc.key` and `frp.ca.crt`:
 
    ```bash
    sudo mkdir -p /srv/frpc/certs
    # copy the three files in, then keep the key private
-   sudo chmod 600 /srv/frpc/certs/frpc.key
+   sudo chmod 600 /srv/frpc/certs/ber.frpc.key
    ```
 
 2. Create `.env`, then start it:
