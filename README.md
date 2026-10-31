@@ -609,8 +609,9 @@ applied in Dockge. Login is WUD's own OIDC integration with authentik: members o
 1. At DreamHost, add the CNAME `wud.local.ber.nvcode.com` → `lab.local.ber.nvcode.com`.
 2. In authentik, *Applications → Applications → Create with provider*, choose
    *OAuth2/OpenID Provider*:
-   - Application name: `WUD`, slug: `wud` (the slug is part of the discovery URL in the
-     stack)
+   - Application name: `WUD`, slug: `wud-local-ber-nvcode-com`. The slug is part of the
+     discovery URL in [`stacks/wud/compose.yaml`](stacks/wud/compose.yaml); if they don't
+     match, WUD shows "Error when trying to get the authentication strategies".
    - Authorization flow: `default-provider-authorization-implicit-consent`
    - Client type: *Confidential*
    - Redirect URI (strict): `https://wud.local.ber.nvcode.com/auth/oidc/authentik/cb`
