@@ -1,0 +1,30 @@
+services:
+  wud:
+    image: getwud/wud:9
+    restart: unless-stopped
+    environment:
+      - WUD_PUBLIC_URL=https://wud.local.ber.nvcode.com
+      # Login via authentik (OIDC); members of "authentik Admins" become WUD admins,
+      # everyone else is rejected, and no local WUD user is needed
+      - WUD_AUTH_OIDC_AUTHENTIK_CLIENTID=${OIDC_CLIENT_ID}
+      - WUD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET=${OIDC_CLIENT_SECRET}
+      - WUD_AUTH_OIDC_AUTHENTIK_DISCOVERY=https://auth.local.ber.nvcode.com/application/o/wud/.well-known/openid-configuration
+      - WUD_AUTH_OIDC_AUTHENTIK_REDIRECT=true
+      - WUD_AUTH_OIDC_AUTHENTIK_ADMINGROUP=authentik Admins
+      - WUD_AUTH_OIDC_AUTHENTIK_DEFAULTROLE=none
+    volumes:
+      # Read-only: WUD only reports available updates; Dockge applies them
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /srv/wud/store:/store
+    networks:
+      - proxy
+    labels:
+      # Login is handled by WUD's own OIDC integration with authentik, not forward auth
+      - traefik.enable=true
+      - traefik.http.routers.wud.rule=Host(`wud.local.ber.nvcode.com`)
+      - traefik.http.routers.wud.entrypoints=websecure
+      - traefik.http.services.wud.loadbalancer.server.port=3000
+
+networks:
+  proxy:
+    external: true

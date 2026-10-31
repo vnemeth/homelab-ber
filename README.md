@@ -67,6 +67,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
   | `traefik.local.ber.nvcode.com` | CNAME | `lab.local.ber.nvcode.com` |
   | `auth.local.ber.nvcode.com`    | CNAME | `lab.local.ber.nvcode.com` |
   | `beszel.local.ber.nvcode.com`  | CNAME | `lab.local.ber.nvcode.com` |
+  | `wud.local.ber.nvcode.com`     | CNAME | `lab.local.ber.nvcode.com` |
 
   Each new service gets a CNAME pointing at `lab.local.ber.nvcode.com`.
 
@@ -111,6 +112,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `traefik` | Reverse proxy and TLS | 80, 443 | Dashboard at `traefik.local.ber.nvcode.com`, behind authentik; certificates in `/srv/traefik/acme` |
 | `beszel` | Host and container monitoring | 8090 (localhost only) | `beszel.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/beszel` |
 | `authentik` | Single sign-on and forward auth | — | `auth.local.ber.nvcode.com`; data in `/srv/authentik`. Memory-heavy: about 1–1.5 GB with PostgreSQL |
+| `wud` | Reports available image updates | — | `wud.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/wud` |
 
 ## Setup log
 
@@ -596,3 +598,33 @@ In Beszel's admin panel (`https://beszel.local.ber.nvcode.com/_/`):
 Password login is turned off in the stack (`DISABLE_PASSWORD_AUTH: "true"`), so only
 authentik logins work. On a fresh setup, create the first user (step 3 above) and set up
 the OIDC login with `DISABLE_PASSWORD_AUTH: "false"`, then switch it back.
+
+### 16. Set up What's Up Docker (WUD)
+
+WUD checks the running containers for newer images and shows them at
+`wud.local.ber.nvcode.com`. It only reports updates (read-only Docker socket); updates are
+applied in Dockge. Login is WUD's own OIDC integration with authentik: members of the
+`authentik Admins` group become WUD admins, everyone else is rejected.
+
+1. At DreamHost, add the CNAME `wud.local.ber.nvcode.com` → `lab.local.ber.nvcode.com`.
+2. In authentik, *Applications → Applications → Create with provider*, choose
+   *OAuth2/OpenID Provider*:
+   - Application name: `WUD`, slug: `wud` (the slug is part of the discovery URL in the
+     stack)
+   - Authorization flow: `default-provider-authorization-implicit-consent`
+   - Client type: *Confidential*
+   - Redirect URI (strict): `https://wud.local.ber.nvcode.com/auth/oidc/authentik/cb`
+   - Scopes: `openid`, `profile`, `OpenID email (verified)`, and
+     `authentik default OAuth Mapping: OpenID 'groups'` if it's listed. WUD needs the
+     `groups` claim for the admin role; the provider's *Preview* tab should show it.
+   - Note the client ID and client secret.
+3. Create the data directory and `.env`, then start it:
+
+   ```bash
+   sudo mkdir -p /srv/wud/store
+   cd /opt/homelab-ber/stacks/wud
+   cp .env.example .env    # fill in OIDC_CLIENT_ID and OIDC_CLIENT_SECRET
+   docker compose up -d
+   ```
+
+4. Open `https://wud.local.ber.nvcode.com`; it redirects to authentik and back.
