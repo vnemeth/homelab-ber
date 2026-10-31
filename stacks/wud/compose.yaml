@@ -8,7 +8,7 @@ services:
       # everyone else is rejected, and no local WUD user is needed
       - WUD_AUTH_OIDC_AUTHENTIK_CLIENTID=${OIDC_CLIENT_ID}
       - WUD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET=${OIDC_CLIENT_SECRET}
-      - WUD_AUTH_OIDC_AUTHENTIK_DISCOVERY=https://auth.local.ber.nvcode.com/application/o/wud/.well-known/openid-configuration
+      - WUD_AUTH_OIDC_AUTHENTIK_DISCOVERY=https://auth.local.ber.nvcode.com/application/o/wud-local-ber-nvcode-com/.well-known/openid-configuration
       - WUD_AUTH_OIDC_AUTHENTIK_REDIRECT=true
       - WUD_AUTH_OIDC_AUTHENTIK_ADMINGROUP=authentik Admins
       - WUD_AUTH_OIDC_AUTHENTIK_DEFAULTROLE=none
@@ -24,7 +24,6 @@ services:
       - traefik.http.routers.wud.rule=Host(`wud.local.ber.nvcode.com`)
       - traefik.http.routers.wud.entrypoints=websecure
       - traefik.http.services.wud.loadbalancer.server.port=3000
-
 networks:
   proxy:
     external: true
