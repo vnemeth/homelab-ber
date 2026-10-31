@@ -669,7 +669,8 @@ through the home connection.
 
 frpc connects out to a remote frps server and exposes Home Assistant there on port `6301`.
 The tunnels are defined in [`stacks/frpc/frpc.toml`](stacks/frpc/frpc.toml); the frps
-address and Home Assistant's address come from `.env`. The connection uses mutual TLS.
+address, its token and Home Assistant's address come from `.env`. The connection uses a
+token and mutual TLS.
 
 1. Put the client certificate, its key and the CA certificate in `/srv/frpc/certs`, as
    `ber.frpc.crt`, `ber.frpc.key` and `frp.ca.crt`:
@@ -684,7 +685,7 @@ address and Home Assistant's address come from `.env`. The connection uses mutua
 
    ```bash
    cd /opt/homelab-ber/stacks/frpc
-   cp .env.example .env    # fill in FRPS_ADDR and HA_HOST
+   cp .env.example .env    # fill in FRPS_ADDR, TOKEN and HA_HOST
    docker compose up -d
    docker compose logs     # should show "start proxy success" for ber-homeassistant
    ```
