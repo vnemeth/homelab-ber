@@ -56,13 +56,25 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 - Connection: Wi-Fi on the onboard Intel adapter (`wlo1`), to a Telekom Speedport router
 - IPv4: `192.168.2.30`, a DHCP reservation for the adapter's MAC address on the router
 - Remote desktop: RDP via xrdp on port 3389, home network only
-- DNS: _TBD_
+- Services: `https://<service>.local.ber.nvcode.com`, through Traefik with a Let's Encrypt
+  wildcard certificate for `*.local.ber.nvcode.com`
+- DNS: `nvcode.com` is hosted at DreamHost, which has these public records:
+
+  | Name                           | Type  | Value                      |
+  | ------------------------------ | ----- | -------------------------- |
+  | `lab.local.ber.nvcode.com`     | A     | `192.168.2.30`             |
+  | `dockge.local.ber.nvcode.com`  | CNAME | `lab.local.ber.nvcode.com` |
+  | `traefik.local.ber.nvcode.com` | CNAME | `lab.local.ber.nvcode.com` |
+
+  Each new service gets a CNAME pointing at `lab.local.ber.nvcode.com`.
 
 ## Container platform
 
 - All services run in Docker containers.
 - Docker Compose stacks are managed with [Dockge](https://github.com/louislam/dockge), at
-  `http://192.168.2.30:5001`.
+  `https://dockge.local.ber.nvcode.com` (fallback: `http://192.168.2.30:5001`).
+- [Traefik](https://traefik.io/) is the reverse proxy for all web interfaces. Stacks join
+  the external Docker network `proxy` and are routed by Docker labels.
 - This repo is cloned to `/opt/homelab-ber` on the server, and Dockge's stacks directory
   is its `stacks/` folder, so stacks edited in Dockge show up in `git status`. Dockge runs
   as root, so files it creates are owned by root; fix with
@@ -85,7 +97,8 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 
 | Stack | Purpose | Port(s) | Notes |
 | ----- | ------- | ------- | ----- |
-| `dockge` | Manages the Docker Compose stacks | 5001 | Data in `/srv/dockge` |
+| `dockge` | Manages the Docker Compose stacks | 5001 | `dockge.local.ber.nvcode.com`; data in `/srv/dockge` |
+| `traefik` | Reverse proxy and TLS | 80, 443 | Dashboard at `traefik.local.ber.nvcode.com`; certificates in `/srv/traefik/acme` |
 
 ## Setup log
 
@@ -396,3 +409,37 @@ docker compose up -d
 ```
 
 Open `http://192.168.2.30:5001` and create the admin account.
+
+### 12. Set up Traefik with a wildcard certificate
+
+Traefik gets a Let's Encrypt certificate for `local.ber.nvcode.com` and
+`*.local.ber.nvcode.com` using the DNS challenge: it creates a temporary TXT record through
+the DreamHost API.
+
+1. In the DreamHost panel, under *Advanced → API*, create an API key with the functions
+   `dns-list_records`, `dns-add_record` and `dns-remove_record`.
+2. Create the shared Docker network and the certificate directory:
+
+   ```bash
+   docker network create proxy
+   sudo mkdir -p /srv/traefik/acme
+   ```
+
+3. Create `stacks/traefik/.env` from [`.env.example`](stacks/traefik/.env.example) and
+   fill in the API key and the dashboard login:
+
+   ```bash
+   cd /opt/homelab-ber/stacks/traefik
+   cp .env.example .env
+   docker run --rm httpd:2.4-alpine htpasswd -nbB valentin 'your-password'   # dashboard login
+   ```
+
+4. Start Traefik, then redeploy Dockge so it joins the `proxy` network:
+
+   ```bash
+   docker compose up -d
+   docker compose logs -f    # wait for the certificate; DreamHost DNS can take minutes
+   cd ../dockge && docker compose up -d
+   ```
+
+The certificate is stored in `/srv/traefik/acme/acme.json` and renewed automatically.

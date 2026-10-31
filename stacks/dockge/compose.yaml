@@ -2,6 +2,7 @@ services:
   dockge:
     image: louislam/dockge:1.5.0
     restart: unless-stopped
+    # Kept as a fallback, so Dockge stays reachable if Traefik is down
     ports:
       - 5001:5001
     volumes:
@@ -11,3 +12,14 @@ services:
       - /opt/homelab-ber/stacks:/opt/homelab-ber/stacks
     environment:
       - DOCKGE_STACKS_DIR=/opt/homelab-ber/stacks
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dockge.rule=Host(`dockge.local.ber.nvcode.com`)
+      - traefik.http.routers.dockge.entrypoints=websecure
+      - traefik.http.services.dockge.loadbalancer.server.port=5001
+
+networks:
+  proxy:
+    external: true

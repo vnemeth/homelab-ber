@@ -33,6 +33,20 @@ Configuration for a single-node homelab in Berlin:
 - **Avoid port clashes.** Check the *Stacks* table for ports already in use before
   assigning a new one.
 - Set `restart: unless-stopped` on long-running services.
+- **Web interfaces go through Traefik.** A stack with a web UI joins the external `proxy`
+  network and sets these labels, instead of publishing a port:
+  ```yaml
+  labels:
+    - traefik.enable=true
+    - traefik.http.routers.<name>.rule=Host(`<name>.local.ber.nvcode.com`)
+    - traefik.http.routers.<name>.entrypoints=websecure
+    - traefik.http.services.<name>.loadbalancer.server.port=<container port>
+  ```
+  The `websecure` entrypoint applies the `*.local.ber.nvcode.com` wildcard certificate, so
+  routers don't set TLS options themselves.
+- **Each new hostname needs a DNS record.** The user adds a CNAME
+  `<name>.local.ber.nvcode.com` → `lab.local.ber.nvcode.com` at DreamHost. Remind them, and
+  add it to the DNS table in `README.md`.
 
 ## Secrets
 
