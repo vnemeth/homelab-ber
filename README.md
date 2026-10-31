@@ -65,6 +65,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
   | `lab.local.ber.nvcode.com`     | A     | `192.168.2.30`             |
   | `dockge.local.ber.nvcode.com`  | CNAME | `lab.local.ber.nvcode.com` |
   | `traefik.local.ber.nvcode.com` | CNAME | `lab.local.ber.nvcode.com` |
+  | `auth.local.ber.nvcode.com`    | CNAME | `lab.local.ber.nvcode.com` |
 
   Each new service gets a CNAME pointing at `lab.local.ber.nvcode.com`.
 
@@ -99,6 +100,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | ----- | ------- | ------- | ----- |
 | `dockge` | Manages the Docker Compose stacks | 5001 | `dockge.local.ber.nvcode.com`; data in `/srv/dockge` |
 | `traefik` | Reverse proxy and TLS | 80, 443 | Dashboard at `traefik.local.ber.nvcode.com`; certificates in `/srv/traefik/acme` |
+| `authentik` | Single sign-on and forward auth | — | `auth.local.ber.nvcode.com`; data in `/srv/authentik`. Memory-heavy: about 1–1.5 GB with PostgreSQL |
 
 ## Setup log
 
@@ -443,3 +445,29 @@ the DreamHost API.
    ```
 
 The certificate is stored in `/srv/traefik/acme/acme.json` and renewed automatically.
+
+### 13. Set up authentik
+
+authentik provides single sign-on. It runs as a server, a background worker and a
+PostgreSQL database, and is served at `auth.local.ber.nvcode.com`. Its stack also defines
+the Traefik forward-auth middleware `authentik@docker`.
+
+1. At DreamHost, add the CNAME `auth.local.ber.nvcode.com` → `lab.local.ber.nvcode.com`.
+2. Create the data directories. authentik runs as UID 1000:
+
+   ```bash
+   sudo mkdir -p /srv/authentik/postgres /srv/authentik/data /srv/authentik/custom-templates
+   sudo chown 1000:1000 /srv/authentik/data /srv/authentik/custom-templates
+   ```
+
+3. Create `stacks/authentik/.env` from [`.env.example`](stacks/authentik/.env.example),
+   with generated values for `PG_PASS` and `AUTHENTIK_SECRET_KEY`.
+4. Start it and run the initial setup:
+
+   ```bash
+   cd /opt/homelab-ber/stacks/authentik
+   docker compose up -d
+   ```
+
+   Open `https://auth.local.ber.nvcode.com/if/flow/initial-setup/` and set the password
+   for the `akadmin` user.

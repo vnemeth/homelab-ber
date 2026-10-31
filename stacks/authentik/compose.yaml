@@ -1,0 +1,65 @@
+services:
+  postgresql:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - /srv/authentik/postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: ${PG_PASS:?database password required}
+      POSTGRES_USER: authentik
+      POSTGRES_DB: authentik
+
+  server:
+    image: ghcr.io/goauthentik/server:2026.8.5
+    restart: unless-stopped
+    command: server
+    environment: &authentik-env
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+    volumes:
+      - /srv/authentik/data:/data
+      - /srv/authentik/custom-templates:/templates
+    networks:
+      default:
+      proxy:
+        # Address Traefik uses for the forward-auth middleware
+        aliases:
+          - authentik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.authentik.rule=Host(`auth.local.ber.nvcode.com`)
+      - traefik.http.routers.authentik.entrypoints=websecure
+      - traefik.http.services.authentik.loadbalancer.server.port=9000
+      # Forward-auth middleware; protect another router with
+      # traefik.http.routers.<name>.middlewares=authentik@docker
+      - traefik.http.middlewares.authentik.forwardauth.address=http://authentik:9000/outpost.goauthentik.io/auth/traefik
+      - traefik.http.middlewares.authentik.forwardauth.trustForwardHeader=true
+      - traefik.http.middlewares.authentik.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-entitlements,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  worker:
+    image: ghcr.io/goauthentik/server:2026.8.5
+    restart: unless-stopped
+    command: worker
+    environment: *authentik-env
+    volumes:
+      - /srv/authentik/data:/data
+      - /srv/authentik/custom-templates:/templates
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+networks:
+  proxy:
+    external: true
