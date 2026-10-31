@@ -4,8 +4,8 @@ serverPort = 7000
 
 # Mutual TLS with frps
 transport.tls.enable = true
-transport.tls.certFile = "/certs/frpc.crt"
-transport.tls.keyFile = "/certs/frpc.key"
+transport.tls.certFile = "/certs/ber.frpc.crt"
+transport.tls.keyFile = "/certs/ber.frpc.key"
 transport.tls.trustedCaFile = "/certs/frp.ca.crt"
 
 [[proxies]]
