@@ -157,14 +157,23 @@ Log out and back in as `valentin` for the group change to apply, then check:
 sudo -n true && echo "passwordless sudo works"
 ```
 
-### 4. Move `/home` and `/srv` onto the data volume
-
-The installer can't create bind mounts, so this is done after the first boot. Switch to a
-text console (Ctrl+Alt+F2) and log in there **without** logging into Xfce, so nothing in
-the home directory is in use.
+Once `sudo` works, lock the root account so it can't be logged into directly:
 
 ```bash
+sudo passwd -l root
+```
+
+### 4. Move `/home` and `/srv` onto the data volume
+
+The installer can't create bind mounts, so this is done after the first boot, on the text
+console, before the desktop is installed. Run it from `/` so the shell isn't using the
+home directory.
+
+```bash
+cd /
+
 # Copy the home directory created by the installer onto the data volume
+sudo apt install rsync    # if it's not already installed
 sudo mkdir -p /data/home /data/srv
 sudo rsync -aAX /home/ /data/home/
 
@@ -183,10 +192,12 @@ sudo mount -a
 sudo reboot
 ```
 
-After the reboot, log into Xfce and check the home directory is intact, then remove the
+After the reboot, check the mounts and that the home directory is intact, then remove the
 fallback copy:
 
 ```bash
+findmnt /data /home /srv    # sources: vg0-data, vg0-data[/home], vg0-data[/srv]
+ls ~
 sudo rm -rf /home.old
 ```
 
