@@ -114,6 +114,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `authentik` | Single sign-on and forward auth | — | `auth.local.ber.nvcode.com`; data in `/srv/authentik`. Memory-heavy: about 1–1.5 GB with PostgreSQL |
 | `wud` | Reports available image updates | — | `wud.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/wud` |
 | `tailscale` | Remote access to the host and LAN | — | Host networking; subnet router for `192.168.2.0/24` and exit node; state in `/srv/tailscale` |
+| `frpc` | Tunnels Home Assistant to the remote frps server | — (remote 6301) | Tunnels defined in `stacks/frpc/frpc.toml`; mTLS certificates in `/srv/frpc/certs` |
 
 ## Setup log
 
@@ -663,3 +664,27 @@ through the home connection.
    - *Edit route settings*: approve the `192.168.2.0/24` subnet route and *Use as exit node*.
    - *Disable key expiry*, so the server doesn't drop off the tailnet after 180 days.
 5. The auth key is only used for the first login; it can be removed from `.env` afterwards.
+
+### 18. Set up frpc
+
+frpc connects out to a remote frps server and exposes Home Assistant there on port `6301`.
+The tunnels are defined in [`stacks/frpc/frpc.toml`](stacks/frpc/frpc.toml); the frps
+address and Home Assistant's address come from `.env`. The connection uses mutual TLS.
+
+1. Put the client certificate, its key and the CA certificate in `/srv/frpc/certs`, as
+   `frpc.crt`, `frpc.key` and `frp.ca.crt`:
+
+   ```bash
+   sudo mkdir -p /srv/frpc/certs
+   # copy the three files in, then keep the key private
+   sudo chmod 600 /srv/frpc/certs/frpc.key
+   ```
+
+2. Create `.env`, then start it:
+
+   ```bash
+   cd /opt/homelab-ber/stacks/frpc
+   cp .env.example .env    # fill in FRPS_ADDR and HA_HOST
+   docker compose up -d
+   docker compose logs     # should show "start proxy success" for ber-homeassistant
+   ```

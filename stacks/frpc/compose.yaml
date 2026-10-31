@@ -1,0 +1,16 @@
+services:
+  frpc:
+    image: fatedier/frpc:v0.71.1
+    restart: unless-stopped
+    mem_limit: 128m
+    command: ["-c", "/etc/frp/frpc.toml"]
+    volumes:
+      # Tunnel definitions live in the repo; server address and mTLS material stay on the server
+      - ./frpc.toml:/etc/frp/frpc.toml:ro
+      - /srv/frpc/certs:/certs:ro
+    environment:
+      FRPS_ADDR: ${FRPS_ADDR}
+      HA_HOST: ${HA_HOST}
+    extra_hosts:
+      # Lets HA_HOST=dockerhost reach services on the host itself
+      - dockerhost:host-gateway

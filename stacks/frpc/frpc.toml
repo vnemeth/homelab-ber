@@ -1,0 +1,17 @@
+# frpc tunnels to the remote frps server. Values in {{ .Envs.* }} come from the stack's .env.
+serverAddr = "{{ .Envs.FRPS_ADDR }}"
+serverPort = 7000
+
+# Mutual TLS with frps
+transport.tls.enable = true
+transport.tls.certFile = "/certs/frpc.crt"
+transport.tls.keyFile = "/certs/frpc.key"
+transport.tls.trustedCaFile = "/certs/frp.ca.crt"
+
+[[proxies]]
+# Proxy names must be unique across all clients of the frps server
+name = "ber-homeassistant"
+type = "tcp"
+localIP = "{{ .Envs.HA_HOST }}"
+localPort = 8123
+remotePort = 6301
