@@ -215,9 +215,31 @@ installed explicitly when needed:
 echo 'APT::Install-Recommends "false";' | sudo tee /etc/apt/apt.conf.d/99no-recommends
 ```
 
-Install only the core of Xfce, a terminal and a display manager:
+Install only the core of Xfce, a terminal, the display manager and the X server.
+`xorg` and `lightdm-gtk-greeter` are only *recommended* by Xfce and LightDM, so with
+recommends turned off they must be listed explicitly, or the desktop won't start:
 
 ```bash
-sudo apt install xfce4 xfce4-terminal lightdm
+sudo apt install xfce4 xfce4-terminal lightdm lightdm-gtk-greeter xorg
 sudo reboot
 ```
+
+Mark the packages the server can't run without as manually installed, so an `autoremove`
+can never take them away (networking, SSH and the desktop):
+
+```bash
+sudo apt-mark manual wpasupplicant dhcpcd-base firmware-iwlwifi ifupdown openssh-server \
+  xorg lightdm-gtk-greeter xfce4 xfce4-terminal lightdm
+```
+
+**Removing extras that were already installed.** Packages installed before recommends
+were turned off stay on the system. To list everything that's only installed because
+another package recommends it, and then remove it:
+
+```bash
+sudo apt autoremove -s -o APT::AutoRemove::RecommendsImportant=false   # dry run: review the list
+sudo apt autoremove -o APT::AutoRemove::RecommendsImportant=false
+```
+
+Run the `apt-mark manual` command above first, so the cleanup doesn't remove the
+networking or desktop packages.
