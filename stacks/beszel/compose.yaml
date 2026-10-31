@@ -1,0 +1,47 @@
+services:
+  beszel:
+    image: henrygd/beszel:0.21
+    restart: unless-stopped
+    # The agent reaches the hub here; also a fallback via SSH tunnel:
+    #   ssh -L 8090:localhost:8090 valentin@192.168.2.30
+    ports:
+      - 127.0.0.1:8090:8090
+    environment:
+      APP_URL: https://beszel.local.ber.nvcode.com
+      # Create Beszel users automatically on their first authentik (OIDC) login
+      USER_CREATION: "true"
+      # Set to "true" once the authentik login works, to allow OIDC logins only
+      DISABLE_PASSWORD_AUTH: "false"
+    volumes:
+      - /srv/beszel/data:/beszel_data
+      - /srv/beszel/socket:/beszel_socket
+    networks:
+      - proxy
+    labels:
+      # Login is handled by Beszel's own OIDC integration with authentik, not forward auth
+      - traefik.enable=true
+      - traefik.http.routers.beszel.rule=Host(`beszel.local.ber.nvcode.com`)
+      - traefik.http.routers.beszel.entrypoints=websecure
+      - traefik.http.services.beszel.loadbalancer.server.port=8090
+
+  beszel-agent:
+    image: henrygd/beszel-agent:0.21
+    restart: unless-stopped
+    # Host networking, so the agent reports the host's network traffic
+    network_mode: host
+    volumes:
+      - /srv/beszel/agent:/var/lib/beszel-agent
+      - /srv/beszel/socket:/beszel_socket
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Disk usage of the data and Docker volumes (/ is reported automatically)
+      - /data/.beszel:/extra-filesystems/data:ro
+      - /var/lib/docker/.beszel:/extra-filesystems/docker:ro
+    environment:
+      LISTEN: /beszel_socket/beszel.sock
+      HUB_URL: http://localhost:8090
+      TOKEN: ${TOKEN}
+      KEY: ${KEY}
+
+networks:
+  proxy:
+    external: true

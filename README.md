@@ -66,6 +66,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
   | `dockge.local.ber.nvcode.com`  | CNAME | `lab.local.ber.nvcode.com` |
   | `traefik.local.ber.nvcode.com` | CNAME | `lab.local.ber.nvcode.com` |
   | `auth.local.ber.nvcode.com`    | CNAME | `lab.local.ber.nvcode.com` |
+  | `beszel.local.ber.nvcode.com`  | CNAME | `lab.local.ber.nvcode.com` |
 
   Each new service gets a CNAME pointing at `lab.local.ber.nvcode.com`.
 
@@ -105,6 +106,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | ----- | ------- | ------- | ----- |
 | `dockge` | Manages the Docker Compose stacks | 5001 (localhost only) | `dockge.local.ber.nvcode.com`, behind authentik; data in `/srv/dockge` |
 | `traefik` | Reverse proxy and TLS | 80, 443 | Dashboard at `traefik.local.ber.nvcode.com`, behind authentik; certificates in `/srv/traefik/acme` |
+| `beszel` | Host and container monitoring | 8090 (localhost only) | `beszel.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/beszel` |
 | `authentik` | Single sign-on and forward auth | — | `auth.local.ber.nvcode.com`; data in `/srv/authentik`. Memory-heavy: about 1–1.5 GB with PostgreSQL |
 
 ## Setup log
@@ -513,3 +515,58 @@ Check in a private browser window:
 - `https://dockge.local.ber.nvcode.com` and `https://traefik.local.ber.nvcode.com` redirect
   to the authentik login, and back after signing in.
 - `http://192.168.2.30:5001` doesn't respond.
+
+### 15. Set up Beszel monitoring
+
+Beszel shows host and Docker container statistics. The hub (web interface) is served at
+`beszel.local.ber.nvcode.com`; the agent runs on the host network and talks to the hub
+through a Unix socket in `/srv/beszel/socket`. Login uses Beszel's own OIDC integration
+with authentik, not forward auth.
+
+1. At DreamHost, add the CNAME `beszel.local.ber.nvcode.com` → `lab.local.ber.nvcode.com`.
+2. Create the data directories, and the marker folders through which the agent reports
+   disk usage of the data and Docker volumes:
+
+   ```bash
+   sudo mkdir -p /srv/beszel/data /srv/beszel/socket /srv/beszel/agent
+   sudo mkdir -p /data/.beszel /var/lib/docker/.beszel
+   ```
+
+3. Start only the hub, open `https://beszel.local.ber.nvcode.com` and create the first
+   user. Use the same email address as your authentik user, so the OIDC login is linked to
+   it later:
+
+   ```bash
+   cd /opt/homelab-ber/stacks/beszel
+   cp .env.example .env
+   docker compose up -d beszel
+   ```
+
+4. In Beszel, *Add System*: name `lab`, Host / IP `/beszel_socket/beszel.sock`. Copy the
+   token and public key into `.env` (`TOKEN`, `KEY`), then start the agent:
+
+   ```bash
+   docker compose up -d
+   ```
+
+**authentik login (OIDC).** In authentik's admin interface:
+
+1. *Applications → Applications → Create with provider*, choose *OAuth2/OpenID Provider*:
+   - Application name: `Beszel`, slug: `beszel`
+   - Authorization flow: `default-provider-authorization-implicit-consent`
+   - Client type: *Confidential*
+   - Redirect URI (strict): `https://beszel.local.ber.nvcode.com/api/oauth2-redirect`
+   - Note the client ID and client secret.
+2. In Beszel's admin panel (`https://beszel.local.ber.nvcode.com/_/`), under *Settings*,
+   turn off *Hide collection create and edit controls*.
+3. Edit the `users` collection → *Options → OAuth2*: enable it and add an
+   *OpenID Connect* provider:
+   - Display name: `authentik`
+   - Client ID and client secret from step 1
+   - Auth URL: `https://auth.local.ber.nvcode.com/application/o/authorize/`
+   - Token URL: `https://auth.local.ber.nvcode.com/application/o/token/`
+   - User info URL: `https://auth.local.ber.nvcode.com/application/o/userinfo/`
+4. Turn *Hide collection create and edit controls* back on.
+5. Log out and back in with *authentik*. Once that works, set
+   `DISABLE_PASSWORD_AUTH: "true"` in [`stacks/beszel/compose.yaml`](stacks/beszel/compose.yaml)
+   and redeploy, so only authentik logins are possible.
