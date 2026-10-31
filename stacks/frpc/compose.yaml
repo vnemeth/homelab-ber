@@ -10,6 +10,7 @@ services:
       - /srv/frpc/certs:/certs:ro
     environment:
       FRPS_ADDR: ${FRPS_ADDR}
+      TOKEN: ${TOKEN}
       HA_HOST: ${HA_HOST}
     extra_hosts:
       # Lets HA_HOST=dockerhost reach services on the host itself
