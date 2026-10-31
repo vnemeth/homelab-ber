@@ -113,6 +113,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `beszel` | Host and container monitoring | 8090 (localhost only) | `beszel.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/beszel` |
 | `authentik` | Single sign-on and forward auth | — | `auth.local.ber.nvcode.com`; data in `/srv/authentik`. Memory-heavy: about 1–1.5 GB with PostgreSQL |
 | `wud` | Reports available image updates | — | `wud.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/wud` |
+| `tailscale` | Remote access to the host and LAN | — | Host networking; subnet router for `192.168.2.0/24` and exit node; state in `/srv/tailscale` |
 
 ## Setup log
 
@@ -629,3 +630,36 @@ applied in Dockge. Login is WUD's own OIDC integration with authentik: members o
    ```
 
 4. Open `https://wud.local.ber.nvcode.com`; it redirects to authentik and back.
+
+### 17. Set up Tailscale
+
+Tailscale gives remote access to the server and the home LAN. The container uses host
+networking and advertises `192.168.2.0/24` as a subnet route, so from any device on the
+tailnet the `*.local.ber.nvcode.com` names (which resolve to `192.168.2.30`) work as they do
+at home. The server is also an exit node, so devices can send all their internet traffic
+through the home connection.
+
+1. Enable IP forwarding on the host. Docker already turns on IPv4 forwarding, but not IPv6,
+   which the exit node needs:
+
+   ```bash
+   printf 'net.ipv4.ip_forward = 1\nnet.ipv6.conf.all.forwarding = 1\n' \
+     | sudo tee /etc/sysctl.d/99-tailscale.conf
+   sudo sysctl -p /etc/sysctl.d/99-tailscale.conf
+   ```
+
+2. In the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys),
+   generate an auth key (one-off, not ephemeral).
+3. Create the state directory and `.env`, then start it:
+
+   ```bash
+   sudo mkdir -p /srv/tailscale/state
+   cd /opt/homelab-ber/stacks/tailscale
+   cp .env.example .env    # fill in TS_AUTHKEY
+   docker compose up -d
+   ```
+
+4. In the admin console, on the `tailscale-ber` machine:
+   - *Edit route settings*: approve the `192.168.2.0/24` subnet route and *Use as exit node*.
+   - *Disable key expiry*, so the server doesn't drop off the tailnet after 180 days.
+5. The auth key is only used for the first login; it can be removed from `.env` afterwards.

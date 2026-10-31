@@ -1,0 +1,25 @@
+services:
+  tailscale:
+    image: tailscale/tailscale:v1.104
+    restart: unless-stopped
+    # Host networking and the kernel TUN device, so the tailnet reaches the host and the LAN
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - /srv/tailscale/state:/var/lib/tailscale
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      # The auth key is only used for the first login; the node identity is kept in the state dir
+      TS_AUTH_ONCE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      # Machine name shown in Tailscale
+      TS_HOSTNAME: tailscale-ber
+      # Subnet router for the home LAN, so *.local.ber.nvcode.com (192.168.2.30) works remotely
+      TS_ROUTES: 192.168.2.0/24
+      # Also offer the server as an exit node for all internet traffic
+      TS_EXTRA_ARGS: --advertise-exit-node
