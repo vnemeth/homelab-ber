@@ -758,3 +758,18 @@ The `homeassistant` stack runs three services:
    `1883`, user `homeassistant`. Zigbee devices show up there once they're paired in
    Zigbee2MQTT.
 8. Open `https://zigbee2mqtt.local.ber.nvcode.com` to pair devices (*Permit join*).
+
+### 20. Install BlueZ for Home Assistant's Bluetooth
+
+Home Assistant uses the host's Bluetooth adapter through the BlueZ daemon, over D-Bus
+(the stack mounts `/run/dbus`). BlueZ is only a recommended package, so the minimal
+install doesn't have it, and Home Assistant logs `Failed to force stop scanner ...
+'NoneType' object has no attribute 'send'`.
+
+```bash
+sudo apt install bluez
+sudo systemctl enable --now bluetooth
+bluetoothctl list    # should list the onboard adapter
+cd /opt/homelab-ber/stacks/homeassistant
+docker compose restart homeassistant
+```

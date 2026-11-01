@@ -5,6 +5,13 @@ services:
     # Host networking, so device discovery (mDNS, SSDP) works and frpc reaches it at
     # dockerhost:8123. Traefik reaches it through host.docker.internal.
     network_mode: host
+    # Lets Home Assistant reset the Bluetooth adapter when it gets stuck
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      # Intel GPU, for hardware-accelerated video decoding
+      - /dev/dri:/dev/dri
     volumes:
       - /srv/homeassistant/config:/config
       - /etc/localtime:/etc/localtime:ro
