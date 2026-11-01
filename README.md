@@ -68,6 +68,8 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
   | `auth.local.ber.nvcode.com`    | CNAME | `lab.local.ber.nvcode.com` |
   | `beszel.local.ber.nvcode.com`  | CNAME | `lab.local.ber.nvcode.com` |
   | `wud.local.ber.nvcode.com`     | CNAME | `lab.local.ber.nvcode.com` |
+  | `homeassistant.local.ber.nvcode.com` | CNAME | `lab.local.ber.nvcode.com` |
+  | `zigbee2mqtt.local.ber.nvcode.com`   | CNAME | `lab.local.ber.nvcode.com` |
 
   Each new service gets a CNAME pointing at `lab.local.ber.nvcode.com`.
 
@@ -115,6 +117,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `wud` | Reports available image updates | — | `wud.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/wud` |
 | `tailscale` | Remote access to the host and LAN | — | Host networking; subnet router for `192.168.2.0/24` and exit node; state in `/srv/tailscale` |
 | `frpc` | Tunnels Home Assistant to the remote frps server | — (remote 6301) | Tunnels defined in `stacks/frpc/frpc.toml`; mTLS certificates in `/srv/frpc/certs` |
+| `homeassistant` | Home Assistant, Mosquitto (MQTT) and Zigbee2MQTT | 8123 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Tag is a monthly release, updated deliberately |
 
 ## Setup log
 
@@ -689,3 +692,69 @@ token and mutual TLS.
    docker compose up -d
    docker compose logs     # should show "start proxy success" for ber-homeassistant
    ```
+
+### 19. Set up Home Assistant, Mosquitto and Zigbee2MQTT
+
+The `homeassistant` stack runs three services:
+
+- **Home Assistant** on the host network, so device discovery works. It's served at
+  `homeassistant.local.ber.nvcode.com` with its own login, and frpc tunnels it to the frps
+  server (`HA_HOST=dockerhost` in frpc's `.env`). Traefik reaches it through
+  `host.docker.internal`, which the Traefik stack maps to the host.
+- **Mosquitto**, the MQTT broker, on port `1883` for the whole LAN. Anonymous access is
+  off; clients log in with a user from `/srv/homeassistant/mosquitto/auth/passwd`.
+- **Zigbee2MQTT** with the Zigbee coordinator, its frontend at
+  `zigbee2mqtt.local.ber.nvcode.com`, behind authentik.
+
+1. At DreamHost, add the CNAMEs `homeassistant.local.ber.nvcode.com` and
+   `zigbee2mqtt.local.ber.nvcode.com` → `lab.local.ber.nvcode.com`.
+2. Redeploy Traefik, so it picks up the `host.docker.internal` mapping:
+
+   ```bash
+   cd /opt/homelab-ber/stacks/traefik
+   docker compose up -d
+   ```
+
+3. Plug in the coordinator and find its stable path:
+
+   ```bash
+   ls -l /dev/serial/by-id/
+   ```
+
+4. Create the data directories, `.env`, and the MQTT users. Mosquitto runs as UID 1883:
+
+   ```bash
+   sudo mkdir -p /srv/homeassistant/config /srv/homeassistant/zigbee2mqtt \
+     /srv/homeassistant/mosquitto/auth /srv/homeassistant/mosquitto/data
+   cd /opt/homelab-ber/stacks/homeassistant
+   cp .env.example .env    # fill in ZIGBEE_DEVICE, ZIGBEE_ADAPTER and Z2M_MQTT_PASSWORD
+
+   # Each command asks for the user's password; use Z2M_MQTT_PASSWORD for zigbee2mqtt
+   docker compose run --rm mosquitto mosquitto_passwd -c /mosquitto/auth/passwd homeassistant
+   docker compose run --rm mosquitto mosquitto_passwd /mosquitto/auth/passwd zigbee2mqtt
+   sudo chown -R 1883:1883 /srv/homeassistant/mosquitto
+   sudo chmod 600 /srv/homeassistant/mosquitto/auth/passwd
+   ```
+
+5. Start it:
+
+   ```bash
+   docker compose up -d
+   ```
+
+6. Home Assistant only accepts proxied requests from trusted proxies. Add this to
+   `/srv/homeassistant/config/configuration.yaml` (Docker's networks are in
+   `172.16.0.0/12`), then `docker compose restart homeassistant`:
+
+   ```yaml
+   http:
+     use_x_forwarded_for: true
+     trusted_proxies:
+       - 172.16.0.0/12
+   ```
+
+7. Open `https://homeassistant.local.ber.nvcode.com` and create the owner account. Then
+   *Settings → Devices & services → Add integration → MQTT*: broker `localhost`, port
+   `1883`, user `homeassistant`. Zigbee devices show up there once they're paired in
+   Zigbee2MQTT.
+8. Open `https://zigbee2mqtt.local.ber.nvcode.com` to pair devices (*Permit join*).

@@ -27,6 +27,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /srv/traefik/acme:/acme
+    extra_hosts:
+      # Traefik routes to containers on the host network (Home Assistant) through this name
+      - host.docker.internal:host-gateway
     networks:
       proxy:
         # Containers resolve authentik's hostname to Traefik directly, so OIDC apps can

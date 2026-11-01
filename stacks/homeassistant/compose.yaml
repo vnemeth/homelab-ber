@@ -1,0 +1,70 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.10
+    restart: unless-stopped
+    # Host networking, so device discovery (mDNS, SSDP) works and frpc reaches it at
+    # dockerhost:8123. Traefik reaches it through host.docker.internal.
+    network_mode: host
+    volumes:
+      - /srv/homeassistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+      # Bluetooth
+      - /run/dbus:/run/dbus:ro
+    environment:
+      TZ: Europe/Berlin
+    labels:
+      # Login is handled by Home Assistant itself, not forward auth
+      - traefik.enable=true
+      - traefik.http.routers.homeassistant.rule=Host(`homeassistant.local.ber.nvcode.com`)
+      - traefik.http.routers.homeassistant.entrypoints=websecure
+      - traefik.http.services.homeassistant.loadbalancer.server.port=8123
+    depends_on:
+      - mosquitto
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    # MQTT for the LAN; Home Assistant connects at localhost:1883
+    ports:
+      - 1883:1883
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - /srv/homeassistant/mosquitto/auth:/mosquitto/auth
+      - /srv/homeassistant/mosquitto/data:/mosquitto/data
+
+  zigbee2mqtt:
+    image: koenkk/zigbee2mqtt:2
+    restart: unless-stopped
+    volumes:
+      - /srv/homeassistant/zigbee2mqtt:/app/data
+      - /run/udev:/run/udev:ro
+    devices:
+      # The Zigbee coordinator, always seen as /dev/zigbee inside the container
+      - ${ZIGBEE_DEVICE}:/dev/zigbee
+    environment:
+      TZ: Europe/Berlin
+      # These override the matching settings in /srv/homeassistant/zigbee2mqtt/configuration.yaml
+      ZIGBEE2MQTT_CONFIG_SERIAL_PORT: /dev/zigbee
+      ZIGBEE2MQTT_CONFIG_SERIAL_ADAPTER: ${ZIGBEE_ADAPTER}
+      ZIGBEE2MQTT_CONFIG_MQTT_SERVER: mqtt://mosquitto:1883
+      ZIGBEE2MQTT_CONFIG_MQTT_USER: zigbee2mqtt
+      ZIGBEE2MQTT_CONFIG_MQTT_PASSWORD: ${Z2M_MQTT_PASSWORD}
+      ZIGBEE2MQTT_CONFIG_HOMEASSISTANT_ENABLED: "true"
+      ZIGBEE2MQTT_CONFIG_FRONTEND_ENABLED: "true"
+      ZIGBEE2MQTT_CONFIG_FRONTEND_PORT: 8080
+    networks:
+      - default
+      - proxy
+    labels:
+      # The frontend has no login of its own, so it sits behind authentik
+      - traefik.enable=true
+      - traefik.http.routers.zigbee2mqtt.rule=Host(`zigbee2mqtt.local.ber.nvcode.com`)
+      - traefik.http.routers.zigbee2mqtt.entrypoints=websecure
+      - traefik.http.routers.zigbee2mqtt.middlewares=authentik@docker
+      - traefik.http.services.zigbee2mqtt.loadbalancer.server.port=8080
+    depends_on:
+      - mosquitto
+
+networks:
+  proxy:
+    external: true
