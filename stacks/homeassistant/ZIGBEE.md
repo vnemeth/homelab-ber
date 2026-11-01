@@ -128,30 +128,35 @@ Mount it first, pair it second. Sources: the
 The TRV measures next to the radiator and reads high. It can regulate on another sensor's
 reading instead, but doesn't fetch it itself: Home Assistant has to keep sending it.
 
-1. In Zigbee2MQTT, set the TRV's *Temperature sensor select* to `remote_temperature`.
+1. In Zigbee2MQTT, set *Temperature sensor select* to `remote_temperature` on every TRV
+   in the room.
 2. In Home Assistant, add an automation (*Edit in YAML*) that sends the room sensor's
    temperature to the TRV's *External temperature input*. Entity IDs are under
    *Entities → the entity → ⚙ Settings*:
 
    ```yaml
-   alias: Living room radiator uses the room sensor
+   alias: Bedroom radiators use the room sensor
    mode: single
    triggers:
      - trigger: state
-       entity_id: sensor.living_room_climate_temperature
+       entity_id: sensor.bedroom_climate_temperature
      # The sensor only reports on change; resend regularly so the TRV doesn't
      # consider the remote source offline
      - trigger: time_pattern
        minutes: "/10"
    conditions:
      - condition: template
-       value_template: "{{ states('sensor.living_room_climate_temperature') | is_number }}"
+       value_template: "{{ states('sensor.bedroom_climate_temperature') | is_number }}"
    actions:
      - action: number.set_value
+       # List the TRVs explicitly: an area target would also set their other number
+       # entities, like the calibration offset
        target:
-         entity_id: number.living_room_radiator_external_temperature_input
+         entity_id:
+           - number.bedroom_radiator_1_external_temperature_input
+           - number.bedroom_radiator_2_external_temperature_input
        data:
-         value: "{{ states('sensor.living_room_climate_temperature') | float | round(1) }}"
+         value: "{{ states('sensor.bedroom_climate_temperature') | float | round(1) }}"
    ```
 
 3. Check the TRV's *Exposes* page: *External temperature input* holds the sensor's value,

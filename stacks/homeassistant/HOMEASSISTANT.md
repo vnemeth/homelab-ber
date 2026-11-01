@@ -15,32 +15,40 @@ temperature: comfort while a Schedule helper is on, eco while it's off. Their ow
 on-device schedule (`auto` mode) isn't used, since it would compete with this one.
 
 1. Create the schedule under *Settings → Devices & services → Helpers → Create helper →
-   Schedule*, e.g. `Living room heating`, and drag in the blocks when the room should be
-   warm. This creates `schedule.living_room_heating`, which is `on` inside a block.
+   Schedule*, e.g. `Bedroom heating`, and drag in the blocks when the room should be
+   warm. This creates `schedule.bedroom_heating`, which is `on` inside a block.
 2. Add the automation:
 
    ```yaml
-   alias: Living room heating follows the schedule
+   alias: Bedroom heating follows the schedule
    mode: single
    triggers:
      - trigger: state
-       entity_id: schedule.living_room_heating
+       entity_id: schedule.bedroom_heating
      # Reapply after a Home Assistant restart
      - trigger: homeassistant
        event: start
+     # Reapply when automations are saved or reloaded
+     - trigger: event
+       event_type: automation_reloaded
    actions:
      - action: climate.set_temperature
+       # Every thermostat in the room, including ones added later
        target:
-         entity_id: climate.living_room_radiator
+         area_id: n_v_bedroom
        data:
          hvac_mode: heat
-         temperature: "{{ 21 if is_state('schedule.living_room_heating', 'on') else 17 }}"
+         temperature: "{{ 21 if is_state('schedule.bedroom_heating', 'on') else 17 }}"
    ```
 
    21 °C is the comfort and 17 °C the eco temperature.
 
 - A manual change, on the dial or in Home Assistant, holds until the schedule next
   switches.
-- Each room gets its own schedule and automation. Rooms that share times can share one
-  schedule: list several climate entities under `entity_id`.
+- The automation runs when the schedule switches either way, not continuously. Until the
+  first switch it shows as never triggered; *⋮ → Run actions* applies it right away.
+- The automation targets the room's area, so a room with two radiators needs nothing
+  extra. Each room gets its own schedule and automation. *Developer tools → Template*
+  with `{{ areas() }}` lists the area IDs; an ID keeps the area's original name when the
+  area is renamed.
 - Change the times by editing the schedule helper; the automation stays as it is.
