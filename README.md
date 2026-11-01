@@ -753,6 +753,8 @@ The `homeassistant` stack runs three services:
    Zigbee2MQTT.
 8. Set up the coordinator and pair devices as described in
    [`stacks/homeassistant/ZIGBEE.md`](stacks/homeassistant/ZIGBEE.md).
+9. Helpers, automations and dashboards are described in
+   [`stacks/homeassistant/HOMEASSISTANT.md`](stacks/homeassistant/HOMEASSISTANT.md).
 
 ### 20. Install BlueZ for Home Assistant's Bluetooth
 

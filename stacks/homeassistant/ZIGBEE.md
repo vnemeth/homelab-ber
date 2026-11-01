@@ -72,3 +72,91 @@ bulbs) act as routers and extend the network's range.
 - After pairing, the device's *Exposes* tab shows temperature, humidity and battery. Its
   *Settings (specific)* tab has calibration offsets, in case the readings differ from a
   reference thermometer.
+
+### Sonoff iPlug S60ZBTPF (smart plug with power metering)
+
+This plug powers the server itself, so it must never switch off. It's also a router.
+
+- **Pairing:** pair it on a different socket, with the server **not** plugged into it,
+  since the button may toggle the relay. Hold the button for about 5 seconds, until the
+  LED flashes quickly.
+- **Before the server goes back on it:**
+  - In Zigbee2MQTT (*Devices → the plug → Exposes*), set *Power-on behavior* to `on`, so
+    the plug comes back on after a power cut and the server can boot.
+  - Leave overload protection (`outlet_control_protect`) off and inching control
+    (`inching_control_set`, which switches the outlet back after a delay) disabled; both
+    can cut the power by themselves.
+  - In Home Assistant, disable the plug's switch entity. The power and energy readings
+    keep working.
+  - The plug has no child lock, so a press on its button still cuts the power. Keep it
+    where nobody bumps it.
+
+  Its features are listed on the
+  [Zigbee2MQTT device page](https://www.zigbee2mqtt.io/devices/S60ZBTPF.html).
+- **Moving the server onto it:** shut the server down, plug it into the S60, switch the
+  S60 on, and boot.
+
+### Sonoff TRVZB (radiator valve, first generation: 3 × AA, no colour display)
+
+Mount it first, pair it second. Sources: the
+[Zigbee2MQTT device page](https://www.zigbee2mqtt.io/devices/TRVZB.html) and
+[Sonoff's help page](https://help.sonoff.tech/docs/trvzb).
+
+1. **Mount and calibrate.** Screw it fully onto the valve thread (M30×1.5 needs no
+   adapter; Danfoss RA, RAV and RAVL each need their matching one). With the batteries
+   in, the display shows `FS` or `RD`: press the top button, it shows `,,7` and the motor
+   runs through the valve's travel while the display flashes. When the flashing stops,
+   hold the top button for about 5 seconds until the temperature shows. No temperature
+   means the calibration failed, usually because of the mounting.
+2. **Pair.** In manual mode, turn the dial counter-clockwise until the display shows `OF`,
+   then hold the top button for 3 seconds. The signal icon flashes; pairing mode stays
+   open for about 3 minutes.
+3. **Test.** Set the mode to `off` and wait an hour: the radiator, including the return
+   pipe, should be completely cold. A radiator that stays warm on the valve side means
+   the valve doesn't fully close; check the mount and calibrate again.
+
+- **Recalibrating** has no Zigbee command: take it off, reinsert the batteries, and go
+  through step 1 again. On its own, it opens and closes the valve once a week (Monday
+  around midday) against calcification.
+- **Frost protection** opens the valve below its set temperature even in `off` mode.
+- **Mode:** `heat` regulates to the setpoint set from Home Assistant; `auto` follows a
+  schedule stored on the device, which competes with Home Assistant, so don't use it.
+  The heating schedule is in [HOMEASSISTANT.md](HOMEASSISTANT.md#heating-schedule).
+
+#### Using a room sensor instead of the built-in one
+
+The TRV measures next to the radiator and reads high. It can regulate on another sensor's
+reading instead, but doesn't fetch it itself: Home Assistant has to keep sending it.
+
+1. In Zigbee2MQTT, set the TRV's *Temperature sensor select* to `remote_temperature`.
+2. In Home Assistant, add an automation (*Edit in YAML*) that sends the room sensor's
+   temperature to the TRV's *External temperature input*. Entity IDs are under
+   *Entities → the entity → ⚙ Settings*:
+
+   ```yaml
+   alias: Living room radiator uses the room sensor
+   mode: single
+   triggers:
+     - trigger: state
+       entity_id: sensor.living_room_climate_temperature
+     # The sensor only reports on change; resend regularly so the TRV doesn't
+     # consider the remote source offline
+     - trigger: time_pattern
+       minutes: "/10"
+   conditions:
+     - condition: template
+       value_template: "{{ states('sensor.living_room_climate_temperature') | is_number }}"
+   actions:
+     - action: number.set_value
+       target:
+         entity_id: number.living_room_radiator_external_temperature_input
+       data:
+         value: "{{ states('sensor.living_room_climate_temperature') | float | round(1) }}"
+   ```
+
+3. Check the TRV's *Exposes* page: *External temperature input* holds the sensor's value,
+   and *Temperature sensor select* stays on `remote_temperature`. If it switches to
+   `remote_source_offline`, updates stopped and the TRV fell back to its own sensor; it
+   switches back once they resume.
+
+Place the sensor away from the radiator, out of direct sun, and not on an outside wall.
