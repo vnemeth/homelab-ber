@@ -742,18 +742,12 @@ The `homeassistant` stack runs three services:
    docker compose up -d
    ```
 
-6. Home Assistant only accepts proxied requests from trusted proxies. Add this to
-   `/srv/homeassistant/config/configuration.yaml` (Docker's networks are in
-   `172.16.0.0/12`), then `docker compose restart homeassistant`:
-
-   ```yaml
-   http:
-     use_x_forwarded_for: true
-     trusted_proxies:
-       - 172.16.0.0/12
-   ```
-
-7. Open `https://homeassistant.local.ber.nvcode.com` and create the owner account. Then
+6. Home Assistant rejects proxied requests until it trusts the proxy, so do the first
+   setup directly at `http://192.168.2.30:8123`: create the owner account, then under
+   *Settings → System → Network* enable reverse proxy support and trust `172.16.0.0/12`
+   (Docker's networks). Home Assistant no longer reads an `http:` block from
+   `configuration.yaml`; it ignores one and shows a warning.
+7. Open `https://homeassistant.local.ber.nvcode.com` and log in. Then
    *Settings → Devices & services → Add integration → MQTT*: broker `localhost`, port
    `1883`, user `homeassistant`. Zigbee devices show up there once they're paired in
    Zigbee2MQTT.
