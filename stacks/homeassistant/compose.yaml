@@ -31,7 +31,8 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     restart: unless-stopped
-    # MQTT for the LAN; Home Assistant connects at localhost:1883
+    # MQTT for the LAN; Home Assistant connects at 127.0.0.1:1883 (localhost fails to
+    # connect, likely because it resolves to IPv6 ::1)
     ports:
       - 1883:1883
     volumes:

@@ -748,10 +748,11 @@ The `homeassistant` stack runs three services:
    (Docker's networks). Home Assistant no longer reads an `http:` block from
    `configuration.yaml`; it ignores one and shows a warning.
 7. Open `https://homeassistant.local.ber.nvcode.com` and log in. Then
-   *Settings → Devices & services → Add integration → MQTT*: broker `localhost`, port
+   *Settings → Devices & services → Add integration → MQTT*: broker `127.0.0.1`, port
    `1883`, user `homeassistant`. Zigbee devices show up there once they're paired in
    Zigbee2MQTT.
-8. Open `https://zigbee2mqtt.local.ber.nvcode.com` to pair devices (*Permit join*).
+8. Set up the coordinator and pair devices as described in
+   [`stacks/homeassistant/ZIGBEE.md`](stacks/homeassistant/ZIGBEE.md).
 
 ### 20. Install BlueZ for Home Assistant's Bluetooth
 
