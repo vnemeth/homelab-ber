@@ -8,6 +8,23 @@ Automations are created in the UI (*Settings → Automations → Create automati
 YAML is pasted through *⋮ → Edit in YAML*. Entity IDs are under *Settings → Devices &
 services → Entities → the entity → ⚙ Settings*.
 
+## HACS
+
+[HACS](https://hacs.xyz) (Home Assistant Community Store) installs community
+integrations and dashboard cards. It was installed into the config directory from the
+`homeassistant` stack directory:
+
+```bash
+cd /opt/homelab-ber/stacks/homeassistant
+docker compose exec -it homeassistant bash -c "wget -O - https://get.hacs.xyz | bash -"
+docker compose restart homeassistant
+```
+
+It then shows up under *Settings → Devices & services → Add integration → HACS*, which
+links it to a GitHub account. Installed from it:
+
+- **apexcharts-card** (frontend): the climate chart on the Heating dashboard.
+
 ## Heating
 
 The radiator valves (TRVZB) stay in `heat` mode, and Home Assistant sets their target
@@ -198,6 +215,74 @@ own dashboard: *Settings → Dashboards → Add dashboard → New dashboard from
 `Heating`. Cards are added with the **＋** in a section; Tile cards for the toggles,
 Number helpers and status sensors, Thermostat cards for the TRVs, and a History graph of
 the room temperature, the target and *heating active*.
+
+#### Climate chart
+
+An apexcharts-card (from HACS), *N&V Bedroom climate*, shows how the bedroom's
+temperature and humidity develop in correlation with the heating system's status, over the
+last 24 hours. It's added as a new panel through the *Manual* (YAML) card
+option. Swiping the chart scrolls to other timeframes; the toolbar zooms and pans.
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: N&V Bedroom climate
+  show_states: true
+  colorize_states: true
+graph_span: 24h
+apex_config:
+  chart:
+    zoom:
+      enabled: true
+  xaxis:
+    type: datetime
+  toolbar:
+    show: true
+    tools:
+      zoom: true
+      zoomIn: true
+      zoomOut: true
+      pan: true
+      reset: true
+series:
+  - entity: sensor.0xb0e8e8fffef4961d_temperature
+    name: Temperature
+    unit: °C
+    yaxis_id: default
+    stroke_width: 2
+    color: '#d32f2f'
+  - entity: sensor.0xb0e8e8fffef4961d_humidity
+    name: Humidity
+    unit: '%'
+    yaxis_id: humidity
+    stroke_width: 2
+    color: '#03a9f4'
+    stroke_dash: 5
+  - entity: binary_sensor.n_v_bedroom_heating_active
+    name: Heating Active
+    type: area
+    yaxis_id: heating
+    transform: 'return x === ''on'' ? 1 : 0;'
+    stroke_width: 0
+    color: '#ff5722'
+    opacity: 0.7
+    curve: stepline
+yaxis:
+  - id: default
+    apex_config:
+      decimalsInFloat: 1
+  - id: humidity
+    opposite: true
+    apex_config:
+      min: 0
+      max: 100
+  # Heating shows as a band in the lower fifth (on = 1 of 0–5), behind the other lines
+  - id: heating
+    show: false
+    min: 0
+    max: 5
+```
 
 ### Notes
 

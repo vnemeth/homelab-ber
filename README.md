@@ -776,3 +776,28 @@ bluetoothctl list    # should list the onboard adapter
 cd /opt/homelab-ber/stacks/homeassistant
 docker compose restart homeassistant
 ```
+
+### 21. Start Docker only once Wi-Fi has its address
+
+Home Assistant runs on the host network, so Docker gives it a copy of the host's
+`/etc/resolv.conf` when the container starts. The installer set up Wi-Fi as
+`allow-hotplug wlo1`, which `network-online.target` doesn't wait for: at boot Docker
+started the containers before dhcpcd had a lease and had written the nameserver, so Home
+Assistant got a `resolv.conf` without one. DNS then failed inside it (`Could not resolve
+host`), e.g. Met.no's `Update of data from the website failed`. With `auto`, the boot
+waits for the lease, and Docker (which starts after `network-online.target`) after it.
+
+```bash
+sudo sed -i 's/^allow-hotplug wlo1/auto wlo1/' /etc/network/interfaces
+grep -n wlo1 /etc/network/interfaces    # auto wlo1
+sudo reboot
+
+# After the reboot
+cd /opt/homelab-ber/stacks/homeassistant
+docker compose exec homeassistant cat /etc/resolv.conf    # nameserver 192.168.2.1
+docker compose exec homeassistant nslookup api.met.no
+```
+
+Without the Speedport (e.g. both coming back after a power cut), the boot now waits for
+the DHCP timeout before carrying on. A container that started with the empty file is
+fixed with `docker compose up -d --force-recreate <service>`.
