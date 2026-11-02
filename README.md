@@ -73,6 +73,10 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 
   Each new service gets a CNAME pointing at `lab.local.ber.nvcode.com`.
 
+  The Speedport's DNS rebind protection drops public DNS answers that point into the home
+  network, so these names resolve to nothing on the LAN (the answer comes back empty).
+  The router has an exception for the domain in its rebind protection settings.
+
 ## Container platform
 
 - All services run in Docker containers.

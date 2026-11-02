@@ -119,9 +119,13 @@ Mount it first, pair it second. Sources: the
   through step 1 again. On its own, it opens and closes the valve once a week (Monday
   around midday) against calcification.
 - **Frost protection** opens the valve below its set temperature even in `off` mode.
+- **Switching points:** the valve opens 1 °C below the target and closes at it.
+  *Temperature accuracy* (−1 to −0.2 °C, firmware 1.3.0+) narrows the gap, at the cost of
+  more valve movement. *Smart temperature control* opens the valve gradually (PID)
+  instead; temperature accuracy is then unavailable.
 - **Mode:** `heat` regulates to the setpoint set from Home Assistant; `auto` follows a
   schedule stored on the device, which competes with Home Assistant, so don't use it.
-  The heating schedule is in [HOMEASSISTANT.md](HOMEASSISTANT.md#heating-schedule).
+  The heating schedule is in [HOMEASSISTANT.md](HOMEASSISTANT.md#heating).
 
 #### Using a room sensor instead of the built-in one
 
@@ -165,3 +169,39 @@ reading instead, but doesn't fetch it itself: Home Assistant has to keep sending
    switches back once they resume.
 
 Place the sensor away from the radiator, out of direct sun, and not on an outside wall.
+
+### IKEA TRÅDFRI bulb LED1937T5 (E27, white spectrum, T120 cylinder, opal, 470 lm)
+
+Zigbee2MQTT identifies it as `TRADFRIbulbT120E27WSopal470lm`. White spectrum means
+dimmable with adjustable colour temperature, but no colours. It's a router, as long as it
+has power: on a wall switch that's often off, the network loses that route, so it's best
+left powered and switched over Zigbee.
+
+- **Pairing:** it has no button; a reset puts it in pairing mode. With the bulb close to
+  the coordinator and *Permit join* on, start with it on, then switch it off and on
+  **6 times**: short "on"s, slightly longer "off"s, and leave it on after the 6th. It
+  blinks or fades to confirm the reset and joins by itself. If not, the timing was off;
+  try again. Zigbee2MQTT notes that 7 cycles sometimes fails on similar models.
+- **Firmware:** IKEA ships updates; Zigbee2MQTT offers them under *OTA*.
+
+### IKEA STYRBAR remote (E2001/E2002)
+
+Battery-powered (2 × AAA), so an end device. Source: the
+[Zigbee2MQTT device page](https://www.zigbee2mqtt.io/devices/E2001_E2002_E2313.html).
+
+- **Pairing:** pair it through the coordinator, not directly to a bulb as IKEA's leaflet
+  describes. With *Permit join* on, press the pairing button under the back cover (next
+  to the batteries) **4 times**; a red light pulses until it has joined. If not, press
+  the big on button (☀) 6 times first, then the pairing button 4 times.
+- **Actions:** each press is published on `zigbee2mqtt/<friendly name>` as `action`:
+  `on`, `off`, `brightness_move_up`, `brightness_move_down`, `brightness_stop`, and
+  `arrow_left_click`/`_hold`/`_release` and the same for `arrow_right`. Home Assistant
+  turns them into light commands, see
+  [HOMEASSISTANT.md](HOMEASSISTANT.md#lighting).
+- **No direct binding** to the bulb: Zigbee2MQTT warns that a bound remote may spam the
+  network, drain its battery or disconnect when the bound device goes offline.
+- **Sleeps** between presses and doesn't answer Zigbee2MQTT then; press a button to wake
+  it, e.g. for an OTA update.
+- **Checking the topic:** Home Assistant's *Settings → Devices & services → MQTT →
+  Configure → Listen to a topic* with `zigbee2mqtt/#` shows each press. Copy the topic
+  from there: a phone may have typed `’` instead of `'` in the friendly name.
