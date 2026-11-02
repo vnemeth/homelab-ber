@@ -217,7 +217,7 @@ the room temperature, the target and *heating active*.
 
 A TRÅDFRI white spectrum bulb, controlled by a STYRBAR remote (`Nora's bedlight remote`
 in Zigbee2MQTT); both are described in [ZIGBEE.md](ZIGBEE.md). The automation listens to
-the remote's MQTT topic. `light.bedroom_bulb` stands for the bulb's entity ID.
+the remote's MQTT topic; the bulb is `light.nora_s_bedlight`.
 
 - **Press ☀ / ☾:** on / off.
 - **Hold ☀ / ☾:** brighter / dimmer, one 20 % step per hold (not smooth dimming).
@@ -238,7 +238,7 @@ conditions:
 actions:
   - variables:
       action: "{{ trigger.payload_json.action }}"
-      light: light.bedroom_bulb
+      light: light.nora_s_bedlight
       # Kelvin per arrow press
       step: 500
       kelvin: "{{ state_attr(light, 'color_temp_kelvin') | int(2700) }}"

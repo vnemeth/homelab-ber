@@ -75,7 +75,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 
   The Speedport's DNS rebind protection drops public DNS answers that point into the home
   network, so these names resolve to nothing on the LAN (the answer comes back empty).
-  The router has an exception for the domain in its rebind protection settings.
+  The router's rebind protection has an exception for `local.ber.nvcode.com`.
 
 ## Container platform
 
