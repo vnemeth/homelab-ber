@@ -70,6 +70,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
   | `wud.local.ber.nvcode.com`     | CNAME | `lab.local.ber.nvcode.com` |
   | `homeassistant.local.ber.nvcode.com` | CNAME | `lab.local.ber.nvcode.com` |
   | `zigbee2mqtt.local.ber.nvcode.com`   | CNAME | `lab.local.ber.nvcode.com` |
+  | `homarr.local.ber.nvcode.com`  | CNAME | `lab.local.ber.nvcode.com` |
 
   Each new service gets a CNAME pointing at `lab.local.ber.nvcode.com`.
 
@@ -124,6 +125,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `tailscale` | Remote access to the host and LAN | — | Host networking; subnet router for `192.168.2.0/24` and exit node; state in `/srv/tailscale` |
 | `frpc` | Tunnels Home Assistant to the remote frps server | — (remote 6301) | Tunnels defined in `stacks/frpc/frpc.toml`; mTLS certificates in `/srv/frpc/certs` |
 | `homeassistant` | Home Assistant, Mosquitto (MQTT) and Zigbee2MQTT | 8123 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Tag is a monthly release, updated deliberately |
+| `homarr` | Dashboard with links and widgets for the services | — | `homarr.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/homarr`. Reads and controls Docker through the socket. Pinned to an exact release (no major-version tag), updated deliberately |
 
 ## Setup log
 
@@ -801,3 +803,36 @@ docker compose exec homeassistant nslookup api.met.no
 Without the Speedport (e.g. both coming back after a power cut), the boot now waits for
 the DHCP timeout before carrying on. A container that started with the empty file is
 fixed with `docker compose up -d --force-recreate <service>`.
+
+### 22. Set up Homarr
+
+Homarr is a dashboard for the services at `homarr.local.ber.nvcode.com`. Login is Homarr's
+own OIDC integration with authentik, and only that: members of `authentik Admins` become
+Homarr admins. It has the Docker socket, so it shows the containers' status and can start
+and stop them.
+
+1. At DreamHost, add the CNAME `homarr.local.ber.nvcode.com` → `lab.local.ber.nvcode.com`.
+2. In authentik, *Applications → Applications → Create with provider*, choose
+   *OAuth2/OpenID Provider*:
+   - Application name: `Homarr`, slug: `homarr-local-ber-nvcode-com`. The slug is part of
+     the issuer and logout URLs in [`stacks/homarr/compose.yaml`](stacks/homarr/compose.yaml).
+   - Authorization flow: `default-provider-authorization-implicit-consent`
+   - Client type: *Confidential*
+   - Redirect URI (strict): `https://homarr.local.ber.nvcode.com/api/auth/callback/oidc`
+   - Scopes: `openid`, `profile`, `OpenID email (verified)`, and
+     `authentik default OAuth Mapping: OpenID 'groups'` if it's listed. Homarr maps the
+     `groups` claim to its own groups; the provider's *Preview* tab should show it.
+   - Note the client ID and client secret.
+3. Create the data directory and `.env`, then start it:
+
+   ```bash
+   sudo mkdir -p /srv/homarr/appdata
+   cd /opt/homelab-ber/stacks/homarr
+   cp .env.example .env    # fill in OIDC_CLIENT_ID and OIDC_CLIENT_SECRET, and
+   openssl rand -hex 32    # this as SECRET_ENCRYPTION_KEY
+   docker compose up -d
+   ```
+
+4. Open `https://homarr.local.ber.nvcode.com` and go through the onboarding. Give
+   `authentik Admins` as the admin group, so its members get admin rights when they log in
+   through authentik.

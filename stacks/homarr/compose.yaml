@@ -1,0 +1,36 @@
+services:
+  homarr:
+    # Homarr publishes no major-version tag, only exact releases: update deliberately
+    image: ghcr.io/homarr-labs/homarr:v2.10.1
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Berlin
+      BASE_URL: https://homarr.local.ber.nvcode.com
+      # Encrypts integration secrets in the database; must stay the same across upgrades
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY}
+      # Login via authentik (OIDC) only; admins are the members of the admin group named
+      # during onboarding ("authentik Admins")
+      AUTH_PROVIDERS: oidc
+      AUTH_OIDC_ISSUER: https://auth.local.ber.nvcode.com/application/o/homarr-local-ber-nvcode-com/
+      AUTH_OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      AUTH_OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      AUTH_OIDC_CLIENT_NAME: authentik
+      AUTH_OIDC_AUTO_LOGIN: "true"
+      AUTH_LOGOUT_REDIRECT_URL: https://auth.local.ber.nvcode.com/application/o/homarr-local-ber-nvcode-com/end-session/
+    volumes:
+      - /srv/homarr/appdata:/appdata
+      # Container status, and starting/stopping containers from the dashboard. This gives
+      # full control over Docker (":ro" wouldn't limit the API), so it's left writable
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - proxy
+    labels:
+      # Login is handled by Homarr's own OIDC integration with authentik, not forward auth
+      - traefik.enable=true
+      - traefik.http.routers.homarr.rule=Host(`homarr.local.ber.nvcode.com`)
+      - traefik.http.routers.homarr.entrypoints=websecure
+      - traefik.http.services.homarr.loadbalancer.server.port=7575
+
+networks:
+  proxy:
+    external: true
