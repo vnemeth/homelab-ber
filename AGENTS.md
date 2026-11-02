@@ -15,6 +15,8 @@ Configuration for a single-node homelab in Berlin:
 ## Layout
 
 - `README.md` — hardware, OS, network, setup log, and the list of stacks.
+- `HOMEASSISTANT.md` — Home Assistant's helpers, automations and dashboards.
+- `ZIGBEE.md` — the Zigbee coordinator and how each device is paired and set up.
 - `stacks/<stack-name>/` — one folder per Dockge stack:
   - `compose.yaml` — the Compose definition (Dockge's default file name)
   - `.env.example` — template of the stack's environment variables with placeholder values,

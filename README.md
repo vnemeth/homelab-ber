@@ -104,10 +104,12 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 
 ```
 .
-├── .gitignore    # Keeps real .env files out of git
-├── README.md     # Server configuration (this file)
-├── AGENTS.md     # Instructions for AI coding agents working in this repo
-└── stacks/       # One folder per Docker Compose stack, managed by Dockge
+├── .gitignore        # Keeps real .env files out of git
+├── README.md         # Server configuration (this file)
+├── AGENTS.md         # Instructions for AI coding agents working in this repo
+├── HOMEASSISTANT.md  # Home Assistant's helpers, automations and dashboards
+├── ZIGBEE.md         # The Zigbee coordinator and devices
+└── stacks/           # One folder per Docker Compose stack, managed by Dockge
 ```
 
 ## Stacks
@@ -756,9 +758,9 @@ The `homeassistant` stack runs three services:
    `1883`, user `homeassistant`. Zigbee devices show up there once they're paired in
    Zigbee2MQTT.
 8. Set up the coordinator and pair devices as described in
-   [`stacks/homeassistant/ZIGBEE.md`](stacks/homeassistant/ZIGBEE.md).
+   [`ZIGBEE.md`](ZIGBEE.md).
 9. Helpers, automations and dashboards are described in
-   [`stacks/homeassistant/HOMEASSISTANT.md`](stacks/homeassistant/HOMEASSISTANT.md).
+   [`HOMEASSISTANT.md`](HOMEASSISTANT.md).
 
 ### 20. Install BlueZ for Home Assistant's Bluetooth
 

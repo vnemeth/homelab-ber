@@ -1,7 +1,7 @@
 # Home Assistant
 
 How Home Assistant is configured: helpers, automations and dashboards. The `homeassistant`
-stack itself is set up in step 19 of the main [README](../../README.md); Zigbee devices
+stack itself is set up in step 19 of the main [README](README.md); Zigbee devices
 are paired as described in [ZIGBEE.md](ZIGBEE.md).
 
 Automations are created in the UI (*Settings → Automations → Create automation*). Their

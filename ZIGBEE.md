@@ -1,7 +1,7 @@
 # Zigbee
 
 How the Zigbee coordinator is set up and how devices are paired. The `homeassistant` stack
-itself is set up in step 19 of the main [README](../../README.md).
+itself is set up in step 19 of the main [README](README.md).
 
 Zigbee2MQTT owns the coordinator and talks to the devices. It publishes them over MQTT,
 and Home Assistant picks them up through its MQTT integration. Home Assistant never talks
