@@ -24,36 +24,76 @@ It then shows up under *Settings → Devices & services → Add integration → 
 links it to a GitHub account. Installed from it:
 
 - **apexcharts-card** (frontend): the climate chart on the Heating dashboard.
+- **Versatile Thermostat** (integration): the heating control, see [Heating](#heating).
 
 ## Heating
 
-The radiator valves (TRVZB) stay in `heat` mode, and Home Assistant sets their target
-temperature. Their own on-device schedule (`auto` mode) isn't used, since it would compete
-with this one.
+[Versatile Thermostat](https://github.com/jmcollin78/versatile_thermostat) (VTherm, from
+HACS) controls the radiator valves (TRVZB). Each room gets one VTherm, which reads the
+room's climate sensor and computes how far the valves open (TPI), then writes that
+opening to the TRVs directly. The TRVs stay in `heat` mode, with *Smart temperature
+control* off
+([ZIGBEE.md](ZIGBEE.md#sonoff-trvzb-radiator-valve-first-generation-3--aa-no-colour-display));
+their own regulation and on-device schedule (`auto` mode) aren't used.
 
-- **Heating season** (a global toggle): when off, every heating automation is disabled
-  and every valve is set to its lowest temperature. When on, they're enabled again.
+- **Heating season** (a global toggle): when off, VTherm's central mode goes to *Stopped*,
+  which switches every VTherm and its valves off, and the heating automations are
+  disabled. When on, central mode goes back to *Auto* and everything is applied again.
 - **Per room**, during the heating season: **comfort** while the room's pre-heat toggle
   is on; otherwise **eco** while its away toggle is on, **comfort** while the schedule is
   on or someone is home, and **eco** outside it.
 
-Automations that belong to the heating carry the label `heating`; the season automation
-switches them by that label, so a new room's automations only need the label.
+Automations and VTherm climate entities that belong to the heating carry the label
+`heating`; the season automation switches them by that label, so a new room's only need
+the label.
+
+### Versatile Thermostat
+
+Installed from HACS (*HACS → search "Versatile Thermostat" → Download*, then restart Home
+Assistant). Thermostats are added under *Settings → Devices & services → Add integration →
+Versatile Thermostat*; each one is a menu of sections, and *Finalize* appears once every
+required section is filled in.
+
+1. **Outdoor temperature**, which TPI uses: *Create helper → Template → Sensor*, named
+   `Outdoor temperature` (`sensor.outdoor_temperature`), unit °C, device class
+   *Temperature*, state class *Measurement*:
+   ```
+   {{ state_attr('weather.forecast_home', 'temperature') }}
+   ```
+2. **Central configuration** (type *Central configuration*), shared by every room:
+   - *Main:* outdoor sensor `sensor.outdoor_temperature`, min 7 °C, max 30 °C, step 0.1.
+   - *TPI:* the defaults (coef_int 0.6, coef_ext 0.01, minimal activation delay 10 s).
+   - *Advanced:* the defaults (safety delay 60 min).
+3. **Preset temperatures**, on the *Central configuration* device (`number.central_configuration_preset_*`):
+
+   | Preset | Present | Away (absent) |
+   |---|---|---|
+   | Comfort | 21 °C | 16 °C |
+   | Eco | 16 °C | 16 °C |
+   | Boost | 23 °C | 16 °C |
+   | Frost | 7 °C | 7 °C |
+
+   *Away* is what a preset uses while the room's presence sensor is off. Comfort-away is
+   the eco temperature, which is what makes comfort follow presence (see below).
+4. **Central mode** (`select.central_configuration_central_mode`): *Auto* in the heating
+   season, *Stopped* outside it. The season automation sets it.
 
 ### Heating season
 
 1. **Toggle:** *Settings → Devices & services → Helpers → Create helper → Toggle*, named
    `Heating season` (`input_boolean.heating_season`).
 2. **Label:** *Settings → Areas, labels & zones → Labels*, create `heating`, and give it
-   to every room's heating automations (*Settings → Automations*, select them, *Add
-   label*). Not to the season automation itself, or it would switch itself off.
+   to every room's heating automations and VTherm climate entity. Not to the season
+   automation itself, or it would switch itself off.
 3. **Automation:**
 
    ```yaml
    alias: Heating season
    description: >-
-     On: enables the heating automations and applies them. Off: disables them and sets
-     every radiator valve to its lowest temperature.
+     On: Versatile Thermostat's central mode goes to Auto, the heating thermostats to
+     heat, and the heating automations are enabled and applied. Off: the automations are
+     disabled and central mode goes to Stopped, which switches every VTherm and its valves
+     off (the TRVs' own frost protection stays active).
    mode: single
    triggers:
      - trigger: state
@@ -65,110 +105,134 @@ switches them by that label, so a new room's automations only need the label.
            entity_id: input_boolean.heating_season
            state: "on"
        then:
+         - action: select.select_option
+           target:
+             entity_id: select.central_configuration_central_mode
+           data:
+             option: Auto
+         - action: climate.set_hvac_mode
+           target:
+             label_id: heating
+           data:
+             hvac_mode: heat
          - action: automation.turn_on
            target:
              label_id: heating
-         # Apply the current schedule, presence and away state right away
+         # Apply the current presets right away
          - action: automation.trigger
            target:
              label_id: heating
-           # automation.trigger skips conditions by default; keep them, so the room
-           # sensor automation doesn't send an unavailable reading
+           # automation.trigger skips conditions by default; keep them
            data:
              skip_condition: false
        else:
-         # Disable first, so no automation overrides the minimum temperature
          - action: automation.turn_off
            target:
              label_id: heating
-         - repeat:
-             for_each: "{{ states.climate | map(attribute='entity_id') | list }}"
-             sequence:
-               - action: climate.set_temperature
-                 target:
-                   entity_id: "{{ repeat.item }}"
-                 data:
-                   hvac_mode: heat
-                   temperature: "{{ state_attr(repeat.item, 'min_temp') }}"
+         - action: select.select_option
+           target:
+             entity_id: select.central_configuration_central_mode
+           data:
+             option: Stopped
    ```
-
-Whether an automation is enabled survives restarts, so the season state does too. With
-the room sensor automation off, the TRVs fall back to their own sensor, which doesn't
-matter at the minimum temperature.
 
 ### N&V bedroom
 
-Area `bedroom`, two TRVs. Its heating automation and the room sensor one from
-[ZIGBEE.md](ZIGBEE.md#using-a-room-sensor-instead-of-the-built-in-one) carry the
-`heating` label.
+Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
 
 1. **Schedule:** *Create helper → Schedule*, named `N&V Bedroom heating`
    (`schedule.n_v_bedroom_heating`). Drag in the blocks when the room should be warm;
    it's `on` inside a block.
-2. **Temperatures:** two helpers of type *Number*, min 5, max 30, step 0.5, unit °C:
-   `N&V Bedroom comfort temperature` (`input_number.n_v_bedroom_comfort_temperature`) and
-   `N&V Bedroom eco temperature` (`input_number.n_v_bedroom_eco_temperature`).
-3. **Away:** *Create helper → Toggle*, named `N&V Bedroom away`
+2. **Away:** *Create helper → Toggle*, named `N&V Bedroom away`
    (`input_boolean.n_v_bedroom_away`), in the bedroom area. A *Button* helper wouldn't
    do: it has no state.
-4. **Pre-heat:** *Create helper → Toggle*, named `N&V Bedroom pre-heat`
+3. **Pre-heat:** *Create helper → Toggle*, named `N&V Bedroom pre-heat`
    (`input_boolean.n_v_bedroom_pre_heat`), in the bedroom area. Switched on from the
    phone on the way home, it warms the room to comfort, even while away is on. It
    switches off on arrival or after 4 hours, whichever comes first. The 4 hours are
    counted by a *Timer* helper, also named `N&V Bedroom pre-heat`
    (`timer.n_v_bedroom_pre_heat`), in the bedroom area, duration `04:00:00`, with
    *Restore* on so it keeps running across Home Assistant restarts.
-5. **Presence:** the Home Assistant Companion app on the phone reports its location;
+4. **Presence:** the Home Assistant Companion app on the phone reports its location;
    under *Settings → People*, assign its device tracker to the person
    (`person.valentin_nemeth`). The app reaches Home Assistant from outside through the
    frpc tunnel. The UI shows the state as *Home*; the actual state is `home`.
-6. **Automation**, with the `heating` label:
+5. **Room presence for VTherm:** *Create helper → Template → Binary sensor*, named
+   `N&V Bedroom presence` (`binary_sensor.n_v_bedroom_presence`), device class
+   *Occupancy*, in the bedroom area. It's on whenever the room should be at comfort,
+   rather than strictly when someone is there:
+   ```
+   {{ is_state('person.valentin_nemeth', 'home')
+      or is_state('input_boolean.n_v_bedroom_pre_heat', 'on')
+      or is_state('schedule.n_v_bedroom_heating', 'on') }}
+   ```
+6. **VTherm** (type *Thermostat over climate*), named `N&V Bedroom`; then put its device
+   in the bedroom area and give `climate.n_v_bedroom` the `heating` label:
+   - *Main:* temperature sensor `sensor.n_v_bedroom_climate_sensor_temperature`, cycle
+     10 min, use the central configuration and central mode.
+   - *Underlyings:* `climate.n_v_bedroom_trv_left` and `climate.n_v_bedroom_trv_right`;
+     self-regulation *Direct valve control*, regulation threshold **5** (a percentage in
+     this mode; below 3 % the TRVZB can lose its calibration), minimum regulation period
+     10 min.
+   - *Valve regulation:* opening degree
+     `number.n_v_bedroom_trv_left_valve_opening_degree`,
+     `number.n_v_bedroom_trv_right_valve_opening_degree`; closing degree
+     `number.n_v_bedroom_trv_left_valve_closing_degree`,
+     `number.n_v_bedroom_trv_right_valve_closing_degree` (same order as the
+     underlyings). VTherm sets the closing degree to 100 minus the opening, so the valve
+     holds the computed position whatever the TRV's own sensor says.
+   - *Features:* presence, with its own sensor `binary_sensor.n_v_bedroom_presence`
+     (not the central one: it's specific to this room).
+   - *Presets, TPI, Advanced:* from the central configuration.
+
+   With comfort-away set to the eco temperature, comfort applies only while the
+   presence sensor is on, so the preset automation below only has to handle the away
+   toggle.
+7. **Preset automation**, with the `heating` label:
 
    ```yaml
-   alias: N&V Bedroom heating automation
+   alias: N&V Bedroom heating preset
    description: >-
-     Comfort while pre-heating; otherwise eco when away, and comfort while the
-     schedule is on or someone is home. Disabled outside the heating season.
-   # A trigger during a run starts over with the current state; with "single", it was
-   # dropped and the TRVs could keep an outdated setpoint
+     Eco while the away toggle is on (pre-heat overrides it), comfort otherwise.
+     Versatile Thermostat applies comfort only while binary_sensor.n_v_bedroom_presence
+     is on (home, pre-heat or schedule); otherwise its away temperature, which is set to
+     eco.
    mode: restart
    triggers:
      # Reapply when automations are saved or reloaded
      - trigger: event
        event_type: automation_reloaded
-     # "to: null" fires on state changes only, not on attribute updates (the person's
-     # GPS position changes constantly and would send commands to the TRVs every time)
      - trigger: state
        entity_id:
-         - schedule.n_v_bedroom_heating
-         - input_number.n_v_bedroom_comfort_temperature
-         - input_number.n_v_bedroom_eco_temperature
          - input_boolean.n_v_bedroom_away
          - input_boolean.n_v_bedroom_pre_heat
-         - person.valentin_nemeth
        to: null
      # Reapply after a Home Assistant restart
      - trigger: homeassistant
        event: start
    actions:
-     - action: climate.set_temperature
-       # Every thermostat in the room, including ones added later
-       target:
-         area_id: bedroom
-       data:
-         hvac_mode: heat
-         temperature: |-
-           {% set preheat = is_state('input_boolean.n_v_bedroom_pre_heat', 'on') %}
-           {% set away = is_state('input_boolean.n_v_bedroom_away', 'on') %}
-           {% set comfort = preheat
-                            or (not away
-                                and (is_state('schedule.n_v_bedroom_heating', 'on')
-                                     or is_state('person.valentin_nemeth', 'home'))) %}
-           {{ states('input_number.n_v_bedroom_comfort_temperature') if comfort
-              else states('input_number.n_v_bedroom_eco_temperature') }}
+     - if:
+         - condition: state
+           entity_id: input_boolean.n_v_bedroom_away
+           state: "on"
+         - condition: state
+           entity_id: input_boolean.n_v_bedroom_pre_heat
+           state: "off"
+       then:
+         - action: climate.set_preset_mode
+           target:
+             entity_id: climate.n_v_bedroom
+           data:
+             preset_mode: eco
+       else:
+         - action: climate.set_preset_mode
+           target:
+             entity_id: climate.n_v_bedroom
+           data:
+             preset_mode: comfort
    ```
 
-7. **Ending pre-heat**, without the `heating` label, so the toggle is also reset outside
+8. **Ending pre-heat**, without the `heating` label, so the toggle is also reset outside
    the heating season:
 
    ```yaml
@@ -243,10 +307,11 @@ Area `bedroom`, two TRVs. Its heating automation and the room sensor one from
                  entity_id: input_boolean.n_v_bedroom_pre_heat
    ```
 
-8. **Status sensors**, for the dashboard: *Create helper → Template*, then the entity
+9. **Status sensors**, for the dashboard: *Create helper → Template*, then the entity
    type.
-   - *Binary sensor* `N&V Bedroom heating active`, device class *Heat*, on while any TRV
-     in the room is heating:
+   - *Binary sensor* `N&V Bedroom heating active`, device class *Heat*, on while any
+     thermostat in the room is heating (the VTherm reports *heating* while its valves
+     are open):
      ```
      {{ area_entities('bedroom') | select('match', 'climate\\.')
         | map('state_attr', 'hvac_action') | select('eq', 'heating')
@@ -260,16 +325,19 @@ Area `bedroom`, two TRVs. Its heating automation and the room sensor one from
      {{ targets | max if targets else none }}
      ```
 
-   The TRVZB doesn't report how far its valve is open; *valve opening degree* is a limit
-   you set, not its position. *Heating*/*idle* is the live signal.
+   How far VTherm opens the valves is `sensor.n_v_bedroom_valve_open_percent`. The
+   TRVs' own *heating*/*idle* is unreliable in this mode, since their internal sensor
+   doesn't drive the valve.
 
 ### Dashboard
 
 The automatic Overview (areas and summaries) takes no custom cards, so the heating has its
 own dashboard: *Settings → Dashboards → Add dashboard → New dashboard from scratch*,
-`Heating`. Cards are added with the **＋** in a section; Tile cards for the toggles,
-Number helpers and status sensors, Thermostat cards for the TRVs, and a History graph of
-the room temperature, the target and *heating active*.
+`Heating`. Cards are added with the **＋** in a section; Tile cards for the toggles, the
+comfort and eco preset temperatures and the status sensors, a Thermostat card for
+`climate.n_v_bedroom` with the preset buttons, a Tile for the valve opening, and a
+History graph of the room temperature, the target and *heating active*. Set
+temperatures on the VTherm, not on the TRVs: VTherm overwrites the TRVs.
 
 #### Climate chart
 
@@ -301,13 +369,13 @@ apex_config:
       pan: true
       reset: true
 series:
-  - entity: sensor.0xb0e8e8fffef4961d_temperature
+  - entity: sensor.n_v_bedroom_climate_sensor_temperature
     name: Temperature
     unit: °C
     yaxis_id: default
     stroke_width: 2
     color: '#d32f2f'
-  - entity: sensor.0xb0e8e8fffef4961d_humidity
+  - entity: sensor.n_v_bedroom_climate_sensor_humidity
     name: Humidity
     unit: '%'
     yaxis_id: humidity
