@@ -64,18 +64,44 @@ required section is filled in.
    - *Main:* outdoor sensor `sensor.outdoor_temperature`, min 7 °C, max 30 °C, step 0.1.
    - *TPI:* the defaults (coef_int 0.6, coef_ext 0.01, minimal activation delay 10 s).
    - *Advanced:* the defaults (safety delay 60 min).
-3. **Preset temperatures**, on the *Central configuration* device (`number.central_configuration_preset_*`):
+3. **Preset temperatures**, on the *Central configuration* device
+   (`number.central_configuration_preset_*`):
 
    | Preset | Present | Away (absent) |
    |---|---|---|
-   | Comfort | 21 °C | 16 °C |
-   | Eco | 16 °C | 16 °C |
-   | Boost | 23 °C | 16 °C |
+   | Comfort | 21 °C | = eco |
+   | Eco | 16 °C | = eco |
+   | Boost | 23 °C | = eco |
    | Frost | 7 °C | 7 °C |
 
    *Away* is what a preset uses while the room's presence sensor is off. Comfort-away is
    the eco temperature, which is what makes comfort follow presence (see below).
-4. **Central mode** (`select.central_configuration_central_mode`): *Auto* in the heating
+4. **Away temperatures follow eco**, so changing eco on the dashboard also changes what an
+   empty room drops to:
+
+   ```yaml
+   alias: Heating absent temperatures follow eco
+   description: >-
+     Keeps Versatile Thermostat's absent temperatures (comfort, eco and boost away) at
+     the eco temperature, so an empty room drops to eco whatever eco is set to.
+   mode: restart
+   triggers:
+     - trigger: state
+       entity_id: number.central_configuration_preset_eco_temp
+       not_to: [unavailable, unknown]
+   actions:
+     - action: number.set_value
+       target:
+         entity_id:
+           - number.central_configuration_preset_comfort_away_temp
+           - number.central_configuration_preset_eco_away_temp
+           - number.central_configuration_preset_boost_away_temp
+       data:
+         value: "{{ trigger.to_state.state }}"
+   ```
+
+   Without the `heating` label, so it also works outside the heating season.
+5. **Central mode** (`select.central_configuration_central_mode`): *Auto* in the heating
    season, *Stopped* outside it. The season automation sets it.
 
 ### Heating season
