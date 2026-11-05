@@ -119,10 +119,21 @@ Mount it first, pair it second. Sources: the
   through step 1 again. On its own, it opens and closes the valve once a week (Monday
   around midday) against calcification.
 - **Frost protection** opens the valve below its set temperature even in `off` mode.
-- **Switching points:** the valve opens 1 °C below the target and closes at it.
-  *Temperature accuracy* (−1 to −0.2 °C, firmware 1.3.0+) narrows the gap, at the cost of
-  more valve movement. *Smart temperature control* opens the valve gradually (PID)
-  instead; temperature accuracy is then unavailable.
+- **Smart temperature control: on** (both bedroom TRVs). The TRV regulates with a PID
+  algorithm: near the target it opens the valve only partly, so some warm water keeps
+  flowing, and it only closes fully when the room is above the target. The room
+  temperature stays steadier than with on/off control. *Temperature accuracy* and the
+  opening degree are unavailable while it's on.
+  - A steady temperature feels cooler than the same setpoint with on/off control, which
+    swung up to 1 °C around it. In the bedroom, 21 °C was too warm with on/off control
+    and 20 °C feels cold with the PID; somewhere in between is right.
+  - Radiators that are cold while the room sensor reads at or above the target are
+    expected, not a fault.
+  - Without it, the valve opens 1 °C below the target and closes fully at it.
+    *Temperature accuracy* (−1 to −0.2 °C, firmware 1.3.0+) narrows that gap, at the cost
+    of more valve movement. *Valve closing degree* below 100 % (firmware 1.1.4+) keeps the
+    valve partly open when closed, but then always, even far above the target and outside
+    the heating season.
 - **Mode:** `heat` regulates to the setpoint set from Home Assistant; `auto` follows a
   schedule stored on the device, which competes with Home Assistant, so don't use it.
   The heating schedule is in [HOMEASSISTANT.md](HOMEASSISTANT.md#heating).
@@ -134,33 +145,39 @@ reading instead, but doesn't fetch it itself: Home Assistant has to keep sending
 
 1. In Zigbee2MQTT, set *Temperature sensor select* to `remote_temperature` on every TRV
    in the room.
-2. In Home Assistant, add an automation (*Edit in YAML*) that sends the room sensor's
-   temperature to the TRV's *External temperature input*. Entity IDs are under
-   *Entities → the entity → ⚙ Settings*:
+2. In Home Assistant, add an automation (*Edit in YAML*) that publishes the room
+   sensor's temperature to each TRV's `external_temperature_input` over MQTT. The topic
+   is `zigbee2mqtt/<friendly name>/set`, so renaming a TRV in Zigbee2MQTT means
+   updating its topic here. The sensor's entity ID is under *Entities → the entity →
+   ⚙ Settings*. For the N&V bedroom, with the `heating` label:
 
    ```yaml
-   alias: Bedroom radiators use the room sensor
+   alias: N&V bedroom radiator uses the room sensor
    mode: single
    triggers:
+     # Resend when automations are saved or reloaded
+     - trigger: event
+       event_type: automation_reloaded
      - trigger: state
-       entity_id: sensor.bedroom_climate_temperature
+       entity_id: sensor.0xb0e8e8fffef4961d_temperature
      # The sensor only reports on change; resend regularly so the TRV doesn't
      # consider the remote source offline
      - trigger: time_pattern
-       minutes: "/10"
+       minutes: "/5"
    conditions:
      - condition: template
-       value_template: "{{ states('sensor.bedroom_climate_temperature') | is_number }}"
+       value_template: "{{ states('sensor.0xb0e8e8fffef4961d_temperature') | is_number }}"
    actions:
-     - action: number.set_value
-       # List the TRVs explicitly: an area target would also set their other number
-       # entities, like the calibration offset
-       target:
-         entity_id:
-           - number.bedroom_radiator_1_external_temperature_input
-           - number.bedroom_radiator_2_external_temperature_input
+     - action: mqtt.publish
        data:
-         value: "{{ states('sensor.bedroom_climate_temperature') | float | round(1) }}"
+         topic: zigbee2mqtt/N&V Bedroom TRV left/set
+         payload: >-
+           {"external_temperature_input": {{ states('sensor.0xb0e8e8fffef4961d_temperature') | float | round(1) }}}
+     - action: mqtt.publish
+       data:
+         topic: zigbee2mqtt/N&V Bedroom TRV right/set
+         payload: >-
+           {"external_temperature_input": {{ states('sensor.0xb0e8e8fffef4961d_temperature') | float | round(1) }}}
    ```
 
 3. Check the TRV's *Exposes* page: *External temperature input* holds the sensor's value,

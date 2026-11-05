@@ -72,6 +72,10 @@ switches them by that label, so a new room's automations only need the label.
          - action: automation.trigger
            target:
              label_id: heating
+           # automation.trigger skips conditions by default; keep them, so the room
+           # sensor automation doesn't send an unavailable reading
+           data:
+             skip_condition: false
        else:
          # Disable first, so no automation overrides the minimum temperature
          - action: automation.turn_off
@@ -110,7 +114,10 @@ Area `bedroom`, two TRVs. Its heating automation and the room sensor one from
 4. **Pre-heat:** *Create helper → Toggle*, named `N&V Bedroom pre-heat`
    (`input_boolean.n_v_bedroom_pre_heat`), in the bedroom area. Switched on from the
    phone on the way home, it warms the room to comfort, even while away is on. It
-   switches off on arrival or after 4 hours, whichever comes first.
+   switches off on arrival or after 4 hours, whichever comes first. The 4 hours are
+   counted by a *Timer* helper, also named `N&V Bedroom pre-heat`
+   (`timer.n_v_bedroom_pre_heat`), in the bedroom area, duration `04:00:00`, with
+   *Restore* on so it keeps running across Home Assistant restarts.
 5. **Presence:** the Home Assistant Companion app on the phone reports its location;
    under *Settings → People*, assign its device tracker to the person
    (`person.valentin_nemeth`). The app reaches Home Assistant from outside through the
@@ -122,7 +129,9 @@ Area `bedroom`, two TRVs. Its heating automation and the room sensor one from
    description: >-
      Comfort while pre-heating; otherwise eco when away, and comfort while the
      schedule is on or someone is home. Disabled outside the heating season.
-   mode: single
+   # A trigger during a run starts over with the current state; with "single", it was
+   # dropped and the TRVs could keep an outdated setpoint
+   mode: restart
    triggers:
      # Reapply when automations are saved or reloaded
      - trigger: event
@@ -164,29 +173,75 @@ Area `bedroom`, two TRVs. Its heating automation and the room sensor one from
 
    ```yaml
    alias: N&V Bedroom pre-heat ends on arrival
-   description: 'N&V Bedroom pre-heat ends on arrival or after a time if not arrived'
-   mode: single
+   description: >-
+     Pre-heat runs a 4-hour timer that survives restarts. It ends on arrival or when the
+     timer finishes, whichever comes first.
+   mode: queued
    triggers:
-     - trigger: state
-       entity_id: person.valentin_nemeth
-       to: home
+     # not_from: the toggle's state is restored at startup; that isn't a switch-on
      - trigger: state
        entity_id: input_boolean.n_v_bedroom_pre_heat
        to: "on"
-       for:
-         hours: 4
-   conditions:
-     - condition: state
+       not_from: [unavailable, unknown]
+       id: switched_on
+     - trigger: state
        entity_id: input_boolean.n_v_bedroom_pre_heat
-       state: "on"
-   actions:
-     - action: input_boolean.turn_off
+       to: "off"
+       not_from: [unavailable, unknown]
+       id: switched_off
+     - trigger: timer.finished
        target:
-         entity_id: input_boolean.n_v_bedroom_pre_heat
+         entity_id: timer.n_v_bedroom_pre_heat
+       id: timer_finished
+     - trigger: state
+       entity_id: person.valentin_nemeth
+       to: home
+       id: arrived
+     # A timer that ran out while Home Assistant was down may finish before this
+     # automation listens; catch that here
+     - trigger: homeassistant
+       event: start
+       id: started
+   actions:
+     - choose:
+         - conditions:
+             - condition: trigger
+               id: switched_on
+           sequence:
+             - action: timer.start
+               target:
+                 entity_id: timer.n_v_bedroom_pre_heat
+         - conditions:
+             - condition: trigger
+               id: switched_off
+           sequence:
+             - action: timer.cancel
+               target:
+                 entity_id: timer.n_v_bedroom_pre_heat
+         - conditions:
+             - condition: trigger
+               id: started
+             - condition: state
+               entity_id: input_boolean.n_v_bedroom_pre_heat
+               state: "on"
+             - condition: state
+               entity_id: timer.n_v_bedroom_pre_heat
+               state: idle
+           sequence:
+             - action: input_boolean.turn_off
+               target:
+                 entity_id: input_boolean.n_v_bedroom_pre_heat
+         - conditions:
+             - condition: trigger
+               id: [timer_finished, arrived]
+             - condition: state
+               entity_id: input_boolean.n_v_bedroom_pre_heat
+               state: "on"
+           sequence:
+             - action: input_boolean.turn_off
+               target:
+                 entity_id: input_boolean.n_v_bedroom_pre_heat
    ```
-
-   The 4-hour timer only lives in memory: a Home Assistant restart in between cancels it,
-   and pre-heat then stays on until arrival or until it's switched off by hand.
 
 8. **Status sensors**, for the dashboard: *Create helper → Template*, then the entity
    type.
