@@ -122,6 +122,9 @@ Mount it first, pair it second. Sources: the
   through step 1 again. On its own, it opens and closes the valve once a week (Monday
   around midday) against calcification.
 - **Frost protection** opens the valve below its set temperature even in `off` mode.
+- **Open window detection** (`open_window`): off. Versatile Thermostat detects open
+  windows from the room sensor instead (see
+  [HOMEASSISTANT.md](HOMEASSISTANT.md#versatile-thermostat)), so only one of them reacts.
 - **Versatile Thermostat controls the valves** (both bedroom TRVs): it computes the
   opening from the room sensor and writes *Valve opening degree* and *Valve closing
   degree* (100 minus the opening), so the valve holds that position whatever the TRV's

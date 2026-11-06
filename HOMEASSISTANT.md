@@ -64,6 +64,12 @@ required section is filled in.
    - *Main:* outdoor sensor `sensor.outdoor_temperature`, min 7 °C, max 30 °C, step 0.1.
    - *TPI:* the defaults (coef_int 0.6, coef_ext 0.01, minimal activation delay 10 s).
    - *Advanced:* the defaults (safety delay 60 min).
+   - *Features:* window. *Window:* no sensor, so automatic detection from the room
+     temperature: open threshold 3 °C/h, close threshold 0 °C/h, max duration 30 min,
+     action *frost temperature*. When the temperature falls faster than 3 °C/h, the
+     window counts as open and the room drops to frost (7 °C). It counts as closed once
+     the temperature stops falling, or after 30 minutes. Normal cooling in the bedroom
+     is about 0.5–1 °C/h; airing it on 4 Nov fell 3 °C in 3 minutes.
 3. **Preset temperatures**, on the *Central configuration* device
    (`number.central_configuration_preset_*`):
 
@@ -208,7 +214,12 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
      underlyings). VTherm sets the closing degree to 100 minus the opening, so the valve
      holds the computed position whatever the TRV's own sensor says.
    - *Features:* presence, with its own sensor `binary_sensor.n_v_bedroom_presence`
-     (not the central one: it's specific to this room).
+     (not the central one: it's specific to this room); window, from the central
+     configuration. `binary_sensor.n_v_bedroom_window_state` (renamed from VTherm's
+     doubled `n_v_bedroom_n_v_bedroom_window_state`) shows a
+     detected open window. To ignore open windows, e.g. while airing on purpose, call
+     the `versatile_thermostat.set_window_bypass` action;
+     `binary_sensor.n_v_bedroom_window_bypass` shows whether it's on.
    - *Presets, TPI, Advanced:* from the central configuration.
 
    With comfort-away set to the eco temperature, comfort applies only while the
