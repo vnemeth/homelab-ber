@@ -107,7 +107,78 @@ required section is filled in.
    ```
 
    Without the `heating` label, so it also works outside the heating season.
-5. **Central mode** (`select.central_configuration_central_mode`): *Auto* in the heating
+5. **Comfort follows the outdoor temperature:** 1 °C warmer while it's cold outside and
+   I'm home. The comfort temperature is set on a helper, which an automation copies to
+   VTherm's comfort preset, adding 1 °C when it's cold. Don't set
+   `number.central_configuration_preset_comfort_temp` directly; the automation
+   overwrites it.
+   - *Create helper → Number*, named `Heating comfort temperature`
+     (`input_number.heating_comfort_temperature`), 15–25 °C, step 0.5, input field.
+   - *Create helper → Number*, named `Outdoor cold threshold`
+     (`input_number.outdoor_cold_threshold`), −7 to 7 °C, step 0.5, input field; set to
+     3 °C. Adjustable on the dashboard (*+1 °C below outdoor*).
+   - *Create helper → Template → Binary sensor*, named `Outdoor cold`
+     (`binary_sensor.outdoor_cold`), device class *Cold*. It turns on below the
+     threshold and off only once it's 1 °C above it, so a forecast hovering around the
+     threshold doesn't switch the comfort temperature back and forth. In between, and
+     while either value is unavailable, it keeps its state. A Threshold helper would do
+     the hysteresis natively, but its limit can't be changed from the dashboard.
+     ```
+     {% set t = states('sensor.outdoor_temperature') | float(none) %}
+     {% set limit = states('input_number.outdoor_cold_threshold') | float(none) %}
+     {% if t is none or limit is none %}{{ this.state == 'on' }}
+     {% elif t < limit %}true
+     {% elif t >= limit + 1 %}false
+     {% else %}{{ this.state == 'on' }}
+     {% endif %}
+     ```
+   - Automation, without the `heating` label like the one above:
+
+   ```yaml
+   alias: Heating comfort follows the outdoor temperature
+   description: >-
+     Versatile Thermostat's comfort temperature is the heating comfort temperature,
+     plus 1 °C while it's cold outside (binary_sensor.outdoor_cold: below the outdoor
+     cold threshold, back 1 °C above it) and Valentin is home.
+   mode: restart
+   triggers:
+     - trigger: event
+       event_type: automation_reloaded
+     - trigger: homeassistant
+       event: start
+     - trigger: state
+       entity_id: input_number.heating_comfort_temperature
+       not_to: [unavailable, unknown]
+     - trigger: state
+       entity_id:
+         - binary_sensor.outdoor_cold
+         - person.valentin_nemeth
+       to: null
+   actions:
+     - if:
+         - condition: state
+           entity_id: binary_sensor.outdoor_cold
+           state: "on"
+         - condition: state
+           entity_id: person.valentin_nemeth
+           state: home
+       then:
+         - action: number.set_value
+           target:
+             entity_id: number.central_configuration_preset_comfort_temp
+           data:
+             value: "{{ states('input_number.heating_comfort_temperature') | float + 1 }}"
+       else:
+         - action: number.set_value
+           target:
+             entity_id: number.central_configuration_preset_comfort_temp
+           data:
+             value: "{{ states('input_number.heating_comfort_temperature') }}"
+   ```
+
+   The preset is central, so the extra degree applies to every room that uses the
+   central presets.
+6. **Central mode** (`select.central_configuration_central_mode`): *Auto* in the heating
    season, *Stopped* outside it. The season automation sets it.
 
 ### Heating season
@@ -371,28 +442,32 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
 The automatic Overview (areas and summaries) takes no custom cards, so the heating has its
 own dashboard: *Settings → Dashboards → Add dashboard → New dashboard from scratch*,
 `Heating`. Cards are added with the **＋** in a section; Tile cards for the toggles, the
-comfort and eco preset temperatures and the status sensors, a Thermostat card for
+comfort temperature (`input_number.heating_comfort_temperature`, see above), the outdoor
+cold threshold (`input_number.outdoor_cold_threshold`), the eco
+preset temperature and the status sensors, a Thermostat card for
 `climate.n_v_bedroom` with the preset buttons, a Tile for the valve opening, and a
 History graph of the room temperature, the target and *heating active*. Set
 temperatures on the VTherm, not on the TRVs: VTherm overwrites the TRVs.
 
 #### Climate chart
 
-An apexcharts-card (from HACS), *N&V Bedroom climate*, shows how the bedroom's
-temperature and humidity develop in correlation with the heating system's status, over the
-last 24 hours. It's added as a new panel through the *Manual* (YAML) card
-option. Swiping the chart scrolls to other timeframes; the toolbar zooms and pans.
+An apexcharts-card (from HACS), *Climate & Heating*, on the Heating dashboard's *Chart*
+view. Over the last 24 hours it shows the bedroom's temperature, target and humidity,
+how far VTherm opens the valves, and the outdoor temperature, so the night-time target can be compared with how cold it is outside. It's
+added through the *Manual* (YAML) card option. Swiping the chart scrolls to other
+timeframes; the toolbar zooms and pans.
 
 ```yaml
 type: custom:apexcharts-card
 header:
   show: true
-  title: N&V Bedroom climate
+  title: Climate & Heating
   show_states: true
   colorize_states: true
 graph_span: 24h
 apex_config:
   chart:
+    height: 400px
     zoom:
       enabled: true
   xaxis:
@@ -412,6 +487,14 @@ series:
     yaxis_id: default
     stroke_width: 2
     color: '#d32f2f'
+  - entity: sensor.n_v_bedroom_target_temperature
+    name: Target Temperature
+    unit: °C
+    yaxis_id: default
+    stroke_width: 2
+    color: '#00897b'
+    stroke_dash: 2
+    curve: stepline
   - entity: sensor.n_v_bedroom_climate_sensor_humidity
     name: Humidity
     unit: '%'
@@ -419,29 +502,45 @@ series:
     stroke_width: 2
     color: '#03a9f4'
     stroke_dash: 5
-  - entity: binary_sensor.n_v_bedroom_heating_active
-    name: Heating Active
+  - entity: sensor.outdoor_temperature
+    name: Outdoor Temperature
+    unit: °C
+    yaxis_id: outdoor
+    stroke_width: 2
+    color: '#7e57c2'
+    stroke_dash: 3
+  # VTherm's computed opening for both TRVs, 0–100 %
+  - entity: sensor.n_v_bedroom_valve_open_percent
+    name: Valve Opening
+    unit: '%'
     type: area
-    yaxis_id: heating
-    transform: 'return x === ''on'' ? 1 : 0;'
-    stroke_width: 0
-    color: '#ff5722'
-    opacity: 0.7
+    yaxis_id: valve
+    stroke_width: 1
+    color: '#ffa000'
+    opacity: 0.2
     curve: stepline
 yaxis:
   - id: default
+    opposite: true
+    min: 15
     apex_config:
       decimalsInFloat: 1
+      tickAmount: 6
   - id: humidity
-    opposite: true
+    min: 50
+    max: 70
     apex_config:
-      min: 0
-      max: 100
-  # Heating shows as a band in the lower fifth (on = 1 of 0–5), behind the other lines
-  - id: heating
+      tickAmount: 5
+  # Outdoor temperature on its own scale, so the room's axis keeps its resolution
+  - id: outdoor
+    apex_config:
+      decimalsInFloat: 0
+      tickAmount: 6
+  # Valve opening fills the chart's height at 100 %; its value shows in the header
+  - id: valve
     show: false
     min: 0
-    max: 5
+    max: 100
 ```
 
 ### Notes
