@@ -71,6 +71,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
   | `homeassistant.local.ber.nvcode.com` | CNAME | `lab.local.ber.nvcode.com` |
   | `zigbee2mqtt.local.ber.nvcode.com`   | CNAME | `lab.local.ber.nvcode.com` |
   | `homarr.local.ber.nvcode.com`  | CNAME | `lab.local.ber.nvcode.com` |
+  | `musicassistant.local.ber.nvcode.com` | CNAME | `lab.local.ber.nvcode.com` |
 
   Each new service gets a CNAME pointing at `lab.local.ber.nvcode.com`.
 
@@ -124,7 +125,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `wud` | Reports available image updates | — | `wud.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/wud` |
 | `tailscale` | Remote access to the host and LAN | — | Host networking; subnet router for `192.168.2.0/24` and exit node; state in `/srv/tailscale` |
 | `frpc` | Tunnels Home Assistant to the remote frps server | — (remote 6301) | Tunnels defined in `stacks/frpc/frpc.toml`; mTLS certificates in `/srv/frpc/certs` |
-| `homeassistant` | Home Assistant, Mosquitto (MQTT) and Zigbee2MQTT | 8123 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Tag is a monthly release, updated deliberately |
+| `homeassistant` | Home Assistant, Mosquitto (MQTT), Zigbee2MQTT and Music Assistant | 8123, 8095, 8097 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; `musicassistant.local.ber.nvcode.com` with Music Assistant's own login (8097 is its stream server, for the players); music library in `/srv/music`; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Home Assistant's tag is a monthly release, updated deliberately |
 | `homarr` | Dashboard with links and widgets for the services | — | `homarr.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/homarr`. Reads and controls Docker through the socket. Pinned to an exact release (no major-version tag), updated deliberately |
 
 ## Setup log

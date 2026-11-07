@@ -74,15 +74,24 @@ services:
       - mosquitto
 
   musicassistant:
-    image: ghcr.io/music-assistant/server:latest
+    image: ghcr.io/music-assistant/server:2
     restart: unless-stopped
+    # Host networking, so it discovers players (mDNS) and they reach its stream server
+    # on 8097. The web UI and API are on 8095; Traefik reaches it through
+    # host.docker.internal.
     network_mode: host
     volumes:
-      - /srv/homeassistant/musicassistan/data:/data/
-      # Uncomment the line below if you have local music files to map
+      - /srv/homeassistant/musicassistant/data:/data
+      # Local music library, read-only
       - /srv/music:/media:ro
     environment:
-      - LOG_LEVEL=info
+      LOG_LEVEL: info
+    labels:
+      # Login is handled by Music Assistant itself, not forward auth, so its apps work
+      - traefik.enable=true
+      - traefik.http.routers.musicassistant.rule=Host(`musicassistant.local.ber.nvcode.com`)
+      - traefik.http.routers.musicassistant.entrypoints=websecure
+      - traefik.http.services.musicassistant.loadbalancer.server.port=8095
 
 networks:
   proxy:
