@@ -73,9 +73,8 @@ services:
     depends_on:
       - mosquitto
 
-  music-assistant-server:
+  musicassistant:
     image: ghcr.io/music-assistant/server:latest
-    container_name: music-assistant-server
     restart: unless-stopped
     network_mode: host
     volumes:
