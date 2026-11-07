@@ -750,13 +750,117 @@ Echo (`media_player.echo`). One station plays at a time.
            data:
              media_id: "http://127.0.0.1:8099/{{ station[0] }}?name={{ station[1] | urlencode }}"
              media_type: radio
+         - action: input_text.set_value
+           target:
+             entity_id: input_text.fm_last_station
+           data:
+             value: "{{ trigger.to_state.state }}"
    ```
 
    Switching back to the previous station within 10 seconds fails: the `fmradio` service
    refuses it for that long after a retune
    ([README step 24](README.md#24-listen-to-fm-radio-with-an-rtl-sdr-dongle)).
 
-3. **Dashboard** `Music` (`dashboard-music`):
+3. **Last station:** *Create helper → Text*, named `FM last station`
+   (`input_text.fm_last_station`), max length 100. The FM radio automation stores each
+   station it plays there (`input_text.set_value` with `{{ trigger.to_state.state }}`
+   after `play_media`), for *"play radio"* by voice.
+
+4. **By voice** ([Voice](#voice)): automation `FM radio by voice`, with Assist sentence
+   triggers. They take precedence over Home Assistant's built-in sentences.
+   - *"play radio"*, *"turn on the radio"*: the last station (radioeins if none yet).
+   - *"play radio fritz"*, *"play radio 95.8"*, *"switch the radio to COSMO"*: the
+     station by name or frequency. Spaces, case and punctuation don't matter (*"radio
+     eins"* finds `radioeins`); an exact match wins over a partial one, so
+     *"Deutschlandfunk"* isn't *"Deutschlandfunk Kultur"*.
+   - *"stop the radio"*, *"turn off the radio"*: `Off`.
+
+   It only sets the dropdown; the FM radio automation plays it, which takes a few
+   seconds. Asking for the station that's already selected goes through `Off` first, so
+   it plays again even if it had stopped.
+
+   ```yaml
+   alias: FM radio by voice
+   mode: queued
+   triggers:
+     - trigger: conversation
+       command:
+         - "(play|start|turn on) [the] radio"
+       id: play
+     - trigger: conversation
+       command:
+         - "(play|start) [the] radio [station] {station}"
+         - "play {station} on [the] radio"
+         - "switch [the] radio to {station}"
+       id: station
+     - trigger: conversation
+       command:
+         - "stop [playing] [the] radio"
+         - "(turn|switch) [the] radio off"
+         - "(turn|switch) off [the] radio"
+       id: stop
+   actions:
+     - choose:
+         - conditions:
+             - condition: trigger
+               id: stop
+           sequence:
+             - action: input_select.select_option
+               target:
+                 entity_id: input_select.fm_station
+               data:
+                 option: "Off"
+             - set_conversation_response: Radio off
+       default:
+         - variables:
+             options: "{{ state_attr('input_select.fm_station', 'options')[1:] }}"
+             # The option to play: the last one, or the best match for the spoken name
+             target: >-
+               {% if trigger.id == 'play' %}
+                 {% set last = states('input_text.fm_last_station') %}
+                 {{ last if last in options else '95.8 radioeins' }}
+               {% else %}
+                 {% set norm = '[^a-z0-9]' %}
+                 {% set wanted = trigger.slots.station | lower | regex_replace(norm, '') %}
+                 {% set ns = namespace(exact='', partial='') %}
+                 {% for o in options %}
+                   {% set parts = o.split(' ', 1) %}
+                   {% set name = parts[1] | lower | regex_replace(norm, '') %}
+                   {% set freq = parts[0] | regex_replace(norm, '') %}
+                   {% if not ns.exact and wanted in [name, freq] %}
+                     {% set ns.exact = o %}
+                   {% elif not ns.partial and wanted and (wanted in name or name in wanted) %}
+                     {% set ns.partial = o %}
+                   {% endif %}
+                 {% endfor %}
+                 {{ ns.exact or ns.partial }}
+               {% endif %}
+         - if:
+             - condition: template
+               value_template: "{{ not target }}"
+           then:
+             - set_conversation_response: "I couldn't find a station called {{ trigger.slots.station }}"
+             - stop: No matching station
+         # Already selected but maybe not playing: through Off, so FM radio plays it again
+         - if:
+             - condition: template
+               value_template: "{{ is_state('input_select.fm_station', target) }}"
+           then:
+             - action: input_select.select_option
+               target:
+                 entity_id: input_select.fm_station
+               data:
+                 option: "Off"
+             - delay: "00:00:01"
+         - action: input_select.select_option
+           target:
+             entity_id: input_select.fm_station
+           data:
+             option: "{{ target }}"
+         - set_conversation_response: "Playing {{ target.split(' ', 1)[1] }}"
+   ```
+
+5. **Dashboard** `Music` (`dashboard-music`):
    - a tile for `input_select.fm_station` with the dropdown (*select options* feature);
    - a *Browse music* shortcut card, which opens the media browser for the Echo
      (`/media-browser/media_player.echo`): Music Assistant's library by artists,
