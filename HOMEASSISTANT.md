@@ -296,15 +296,20 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
    With comfort-away set to the eco temperature, comfort applies only while the
    presence sensor is on, so the preset automation below only has to handle the away
    toggle.
-7. **Preset automation**, with the `heating` label:
+7. **Preset automation**, with the `heating` label. It also keeps the VTherm on `heat`:
+   VTherm comes back up off after a Home Assistant restart or an integration reload,
+   and the season automation only switches it on when the season toggle changes. The
+   `heating` label disables this automation outside the heating season, so it never
+   switches the heating on then.
 
    ```yaml
    alias: N&V Bedroom heating preset
    description: >-
-     Eco while the away toggle is on (pre-heat overrides it), comfort otherwise.
-     Versatile Thermostat applies comfort only while binary_sensor.n_v_bedroom_presence
-     is on (home, pre-heat or schedule); otherwise its away temperature, which is set to
-     eco.
+     Keeps the VTherm heating, and applies the preset: eco while the away toggle is on
+     (pre-heat overrides it), comfort otherwise. Versatile Thermostat applies comfort
+     only while binary_sensor.n_v_bedroom_presence is on (home, pre-heat or schedule);
+     otherwise its away temperature, which is set to eco. Disabled outside the heating
+     season (heating label).
    mode: restart
    triggers:
      # Reapply when automations are saved or reloaded
@@ -318,7 +323,24 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
      # Reapply after a Home Assistant restart
      - trigger: homeassistant
        event: start
+     # VTherm comes back off after a restart or an integration reload; reapply once
+     # it's ready
+     - trigger: state
+       entity_id: climate.n_v_bedroom
+       attribute: is_ready
+       to: true
    actions:
+     # At startup VTherm isn't ready until the TRVs are available through Zigbee2MQTT.
+     # A wait_template, not wait_for_trigger: usually it's ready already
+     - wait_template: "{{ state_attr('climate.n_v_bedroom', 'is_ready') == true }}"
+       timeout:
+         minutes: 5
+       continue_on_timeout: false
+     - action: climate.set_hvac_mode
+       target:
+         entity_id: climate.n_v_bedroom
+       data:
+         hvac_mode: heat
      - if:
          - condition: state
            entity_id: input_boolean.n_v_bedroom_away
