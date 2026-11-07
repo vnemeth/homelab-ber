@@ -127,6 +127,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `frpc` | Tunnels Home Assistant to the remote frps server | — (remote 6301) | Tunnels defined in `stacks/frpc/frpc.toml`; mTLS certificates in `/srv/frpc/certs` |
 | `homeassistant` | Home Assistant, Mosquitto (MQTT), Zigbee2MQTT and Music Assistant | 8123, 8095, 8097, 3483 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; `musicassistant.local.ber.nvcode.com` with Music Assistant's own login (8097 is its stream server, 3483 its Squeezelite server, for the players; the Echo plays through Squeezelite on the host, [step 23](#23-play-music-assistant-on-the-amazon-echo-over-bluetooth)); music library in `/srv/music`; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Home Assistant's tag is a monthly release, updated deliberately |
 | `homarr` | Dashboard with links and widgets for the services | — | `homarr.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/homarr`. Reads and controls Docker through the socket. Pinned to an exact release (no major-version tag), updated deliberately |
+| `fmradio` | FM radio from an RTL-SDR dongle, as an MP3 stream for Music Assistant | 8099 (localhost only) | `http://127.0.0.1:8099/<MHz>` tunes to a station, mono. Image built from the stack's `Dockerfile` (Alpine, about 250 MB); see [step 24](#24-listen-to-fm-radio-with-an-rtl-sdr-dongle) |
 
 ## Setup log
 
@@ -987,3 +988,42 @@ Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first sus
 7. In Music Assistant, *Settings → Providers → Add*, add **Squeezelite** (slimproto). It
    listens on port 3483, and the player `Echo` shows up. Through the Music Assistant
    integration, Home Assistant gets it as a media player too (`media_player.echo`).
+
+### 24. Listen to FM radio with an RTL-SDR dongle
+
+The dongle is a DollarTek RTL-SDR USB 2.0 stick
+([Amazon B07DJT5NHD](https://www.amazon.de/-/en/dp/B07DJT5NHD)): a Realtek RTL2832U
+demodulator with a Rafael Micro R820T2 tuner. It shows up as `0bda:2838 Realtek
+Semiconductor Corp. RTL2838 DVB-T`. It receives FM, and the `fmradio` stack turns a
+station into an MP3 stream: `http://127.0.0.1:8099/95.8` tunes to 95.8 MHz and streams
+it until the client disconnects. Music Assistant plays it like an internet radio station,
+on any of its players. There is one dongle, so only one station plays at a time; a new
+request takes over the dongle. `rtl_fm` only demodulates mono, which makes no difference
+on the Echo. Decoding and encoding take a few percent of one CPU core while playing.
+
+1. Keep the kernel's DVB-T TV driver off the dongle. It would claim it, and `rtl_fm`
+   then fails with `usb_claim_interface error -6`:
+
+   ```bash
+   echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/rtl-sdr-blacklist.conf
+   # If the dongle is already plugged in (or unplug and replug it)
+   sudo modprobe -r rtl2832_sdr dvb_usb_rtl28xxu
+   lsmod | grep -E 'dvb|rtl2832'        # nothing
+   ```
+
+2. Deploy the `fmradio` stack in Dockge. Dockge builds the image from the stack's
+   `Dockerfile`; to pick up changes to it or `fmradio.py`, rebuild with
+   `docker compose up -d --build` in `/opt/homelab-ber/stacks/fmradio`. Test it with a
+   station:
+
+   ```bash
+   curl -s -m 10 http://127.0.0.1:8099/95.8 -o /tmp/test.mp3; ls -l /tmp/test.mp3   # ~150 KB
+   ```
+
+   Silence or hiss: the dongle's antenna, or its frequency is off. Most dongles are
+   within a few ppm; `PPM` in `compose.yaml` corrects it.
+
+3. Optionally, add stations to Music Assistant's library, to pick them in its own app:
+   under *Library → Radio*, add an item from a URL, `http://127.0.0.1:8099/<MHz>`, and
+   name it. Home Assistant doesn't need them (see `HOMEASSISTANT.md`).
+

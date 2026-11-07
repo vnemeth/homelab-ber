@@ -1,0 +1,21 @@
+services:
+  fmradio:
+    # Built from the Dockerfile here: rtl_fm tunes the dongle, ffmpeg encodes MP3,
+    # fmradio.py serves it at http://127.0.0.1:8099/<MHz>
+    build: .
+    image: fmradio:local
+    restart: unless-stopped
+    # Only Music Assistant (host network) plays the stream, so it stays on localhost
+    ports:
+      - 127.0.0.1:8099:8099
+    volumes:
+      # The dongle; mounted rather than passed as a device, so it still works after
+      # it's been unplugged and gets a new device node
+      - /dev/bus/usb:/dev/bus/usb
+    device_cgroup_rules:
+      # USB devices
+      - c 189:* rmw
+    environment:
+      # Frequency correction of the dongle in ppm, and tuner gain in dB (empty: auto)
+      PPM: 0
+      GAIN: ""
