@@ -897,17 +897,30 @@ Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first sus
      makes the Echo reject it, and the server loses the key while the Echo keeps it;
      then remove `lab` in the Alexa app and on the server, and start over.
    - Connecting right after pairing can be refused once or twice before it goes through.
+   - Pair with an agent registered, in one interactive `bluetoothctl` session. Without
+     one (`bluetoothctl pair` on its own), it pairs but doesn't bond: `Bonded: no`, the
+     key stays in memory only, and after a reboot or Bluetooth restart the Echo can't
+     be connected until it's paired again.
 
-   Start a scan, tap *Neues Gerät koppeln*, and as soon as the Echo shows up:
+   Tap *Neues Gerät koppeln*, then:
 
    ```bash
-   bluetoothctl --timeout 120 scan on &    # until "Echo-0CB" shows up
-   bluetoothctl pair 08:91:15:BB:3A:B9
-   bluetoothctl trust 08:91:15:BB:3A:B9
-   bluetoothctl connect 08:91:15:BB:3A:B9  # repeat if refused; the Echo says "mit lab verbunden"
+   bluetoothctl
+   # in bluetoothctl:
+   agent NoInputNoOutput
+   default-agent
+   scan on                     # until "Echo-0CB" shows up
+   pair 08:91:15:BB:3A:B9
+   trust 08:91:15:BB:3A:B9
+   scan off
+   connect 08:91:15:BB:3A:B9   # repeat if refused; the Echo says "mit lab verbunden"
+   info 08:91:15:BB:3A:B9      # Paired: yes, Bonded: yes
+   quit
    ```
 
-   *lab* then shows as connected under the Echo's Bluetooth devices in the app. Test it:
+   `Bonded: yes` means the key is stored: `/var/lib/bluetooth/<adapter>/08:91:15:BB:3A:B9/info`
+   has a `[LinkKey]` section. *lab* then shows as connected under the Echo's Bluetooth
+   devices in the app. Test it:
 
    ```bash
    bluealsa-cli list-pcms    # .../dev_08_91_15_BB_3A_B9/a2dpsrc/sink
@@ -960,7 +973,9 @@ Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first sus
    [Service]
    Type=oneshot
    # "-": a failed attempt (Echo off or out of range) isn't an error
-   ExecStart=-/bin/sh -c 'bluetoothctl info 08:91:15:BB:3A:B9 | grep -q "Connected: yes" || bluetoothctl connect 08:91:15:BB:3A:B9'
+   # The UUID (Audio Sink) makes it connect over classic Bluetooth: after a Bluetooth
+   # restart, a plain connect tries Bluetooth LE and fails (le-connection-abort-by-local)
+   ExecStart=-/bin/sh -c 'bluetoothctl info 08:91:15:BB:3A:B9 | grep -q "Connected: yes" || bluetoothctl connect 08:91:15:BB:3A:B9 0000110b-0000-1000-8000-00805f9b34fb'
    ```
 
    and `/etc/systemd/system/echo-bluetooth-connect.timer`:
