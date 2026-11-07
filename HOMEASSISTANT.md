@@ -764,3 +764,24 @@ Echo (`media_player.echo`). One station plays at a time.
    - a media control card for `media_player.echo`: cover, title, playback controls; tap
      it for volume.
 
+## Voice
+
+The voice satellite (Waveshare ESP32-S3-AUDIO-Board, `esphome/voice-satellite.yaml`,
+[README step 25](README.md#25-set-up-a-voice-assistant)) listens for *"Okay Nabu"* and
+hands the request to Assist. Key 2 on the board starts it without the wake word.
+
+1. **Speech services:** *Settings → Devices & services → Add integration → Wyoming
+   Protocol*, twice: host `127.0.0.1`, port `10300` (faster-whisper,
+   `stt.faster_whisper`) and port `10200` (Piper, `tts.piper`). Both come from the
+   `wyoming` stack.
+2. **Pipeline:** *Settings → Voice assistants → Home Assistant* (the preferred one):
+   language English, conversation agent *Home Assistant*, speech-to-text
+   *faster-whisper* (English), text-to-speech *piper*, voice `en_US-lessac-medium`.
+   The wake word isn't set here: the board detects it itself.
+3. **The board:** *Settings → Devices & services*, ESPHome under *Discovered*, with
+   `api_encryption_key` from `esphome/secrets.yaml` on the server. On its device page,
+   *Assistant* is set to the pipeline above.
+
+What it can control is what's exposed to Assist: *Settings → Voice assistants →
+Expose*.
+
