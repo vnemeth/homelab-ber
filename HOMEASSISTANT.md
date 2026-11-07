@@ -719,11 +719,22 @@ Echo (`media_player.echo`). One station plays at a time.
                target:
                  entity_id: media_player.echo
        default:
+         # "95.8 radioeins" → frequency and name; the name is what the player shows
+         - variables:
+             station: "{{ trigger.to_state.state.split(' ', 1) }}"
          - action: music_assistant.play_media
            target:
              entity_id: media_player.echo
            data:
-             media_id: "http://127.0.0.1:8099/{{ trigger.to_state.state.split(' ')[0] }}"
+             media_id: "http://127.0.0.1:8099/{{ station[0] }}?name={{ station[1] | urlencode }}"
              media_type: radio
    ```
+
+   Switching back to the previous station within 10 seconds fails: the `fmradio` service
+   refuses it for that long after a retune
+   ([README step 24](README.md#24-listen-to-fm-radio-with-an-rtl-sdr-dongle)).
+
+3. **Dashboard** `Music` (`dashboard-music`): a tile for `input_select.fm_station` with
+   the dropdown (*select options* feature), and a tile for `media_player.echo` with
+   playback controls and volume.
 

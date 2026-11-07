@@ -995,8 +995,9 @@ The dongle is a DollarTek RTL-SDR USB 2.0 stick
 ([Amazon B07DJT5NHD](https://www.amazon.de/-/en/dp/B07DJT5NHD)): a Realtek RTL2832U
 demodulator with a Rafael Micro R820T2 tuner. It shows up as `0bda:2838 Realtek
 Semiconductor Corp. RTL2838 DVB-T`. It receives FM, and the `fmradio` stack turns a
-station into an MP3 stream: `http://127.0.0.1:8099/95.8` tunes to 95.8 MHz and streams
-it until the client disconnects. Music Assistant plays it like an internet radio station,
+station into an MP3 stream: `http://127.0.0.1:8099/95.8?name=radioeins` tunes to
+95.8 MHz and streams it until the client disconnects. `name` goes into the stream's
+title tag and `icy-name` header, which Music Assistant shows instead of the URL. Music Assistant plays it like an internet radio station,
 on any of its players. There is one dongle, so only one station plays at a time:
 requests for the playing station share it, and a request for another one retunes.
 
@@ -1004,7 +1005,10 @@ Starting and stopping the tuner in quick succession hung the dongle until it was
 unplugged (`usb 1-8: device descriptor read/64, error -110` in `dmesg`, and `rtl_fm`
 reports `No supported devices found`). Music Assistant opens a stream several times
 in a row when it starts it, so the service keeps the tuner running for 15 s after the
-last client is gone, and waits 2 s after stopping it before starting it again. `rtl_fm` only demodulates mono, which makes no difference
+last client is gone, and waits 2 s after stopping it before starting it again. A
+retune ends the previous station's stream, and Music Assistant's player then
+reconnects to it, which would retune straight back; so for 10 s after a retune the
+previous station is refused (HTTP 503). `rtl_fm` only demodulates mono, which makes no difference
 on the Echo. Decoding and encoding take a few percent of one CPU core while playing.
 
 1. Keep the kernel's DVB-T TV driver off the dongle. It would claim it, and `rtl_fm`
