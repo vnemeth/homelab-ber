@@ -657,15 +657,18 @@ actions:
 
 ### FM radio
 
-FM comes from the RTL-SDR dongle through the `fmradio` stack
-([README step 24](README.md#24-listen-to-fm-radio-with-an-rtl-sdr-dongle)):
-`http://127.0.0.1:8099/<MHz>` streams a station, and Music Assistant plays it on the
-Echo (`media_player.echo`). One station plays at a time.
+FM and DAB+ come from the RTL-SDR dongle through the `fmradio` stack
+([README step 24](README.md#24-listen-to-fm-and-dab-radio-with-an-rtl-sdr-dongle)):
+`http://127.0.0.1:8099/<MHz>` streams an FM station, `/<block>?name=<station>` a DAB+
+one, and Music Assistant plays it on the Echo (`media_player.echo`). One station plays
+at a time.
 
-1. **Station:** *Create helper → Dropdown*, named `FM station`
-   (`input_select.fm_station`). The options start with the frequency, which the
-   automation reads, and are sorted like a radio dial; `Off` stops playback. Berlin's
-   stations as of November 2026:
+1. **Station:** *Create helper → Dropdown*, named `Radio station`
+   (`input_select.fm_station`; it was FM only at first). Each option starts with the
+   FM frequency or the DAB+ block, which the automation reads; for DAB+ the rest must
+   be the station's name as the block broadcasts it, ignoring case, spaces and
+   punctuation (the README lists them). `Off` stops playback. FM first, sorted like a
+   radio dial, then DAB+ stations that aren't on FM, as of November 2026:
 
    ```
    Off
@@ -696,8 +699,23 @@ Echo (`media_player.echo`). One station plays at a time.
    104.6 104.6 RTL
    105.5 Spreeradio
    106.0 Schlager Radio
-   106.8 JazzRadio
    107.5 BB Radio
+   5C Dlf Nova
+   5C Sunshine Live
+   5C Radio BOB!
+   5C Klassik Radio
+   5D Absolut Bella
+   5D Absolut Hot
+   5D Absolut Germany
+   5D Rock Antenne
+   5D 80s80s
+   5D Nostalgie
+   7B ByteFM
+   7B 60er70er Gold
+   7B 106.8 pure fm
+   7B Star*Sat Radio
+   7B JazzRadio Berlin
+   12D Radio Paloma
    ```
 
 2. **Automation:** picking a station plays it; when the Echo has stopped playing for a
@@ -708,7 +726,7 @@ Echo (`media_player.echo`). One station plays at a time.
    ```yaml
    alias: FM radio
    description: >-
-     Plays the station picked in FM station on the Echo, from the fmradio stack; Off
+     Plays the station picked in Radio station on the Echo, from the fmradio stack; Off
      stops it. Resets to Off once the Echo has stopped for a minute.
    mode: restart
    triggers:
@@ -741,7 +759,8 @@ Echo (`media_player.echo`). One station plays at a time.
                target:
                  entity_id: media_player.echo
        default:
-         # "95.8 radioeins" → frequency and name; the name is what the player shows
+         # "95.8 radioeins" → frequency and name ("5C Radio BOB!": block and name); the
+         # name is what the player shows
          - variables:
              station: "{{ trigger.to_state.state.split(' ', 1) }}"
          - action: music_assistant.play_media
@@ -759,7 +778,7 @@ Echo (`media_player.echo`). One station plays at a time.
 
    Switching back to the previous station within 10 seconds fails: the `fmradio` service
    refuses it for that long after a retune
-   ([README step 24](README.md#24-listen-to-fm-radio-with-an-rtl-sdr-dongle)).
+   ([README step 24](README.md#24-listen-to-fm-and-dab-radio-with-an-rtl-sdr-dongle)).
 
 3. **Last station:** *Create helper → Text*, named `FM last station`
    (`input_text.fm_last_station`), max length 100. The FM radio automation stores each
@@ -769,14 +788,14 @@ Echo (`media_player.echo`). One station plays at a time.
 4. **By voice** ([Voice](#voice)): automation `FM radio by voice`, with Assist sentence
    triggers. They take precedence over Home Assistant's built-in sentences.
    - *"play radio"*, *"turn on the radio"*: the last station (radioeins if none yet).
-   - *"play radio fritz"*, *"play radio 95.8"*, *"switch the radio to COSMO"*: the
-     station by name or frequency. Spaces, case and punctuation don't matter (*"radio
+   - *"play radio fritz"*, *"play radio 95.8"*, *"switch the radio to COSMO"*,
+     *"play radio Radio BOB"*: the station by name or frequency, FM or DAB+. Spaces, case and punctuation don't matter (*"radio
      eins"* finds `radioeins`); an exact match wins over a partial one, so
      *"Deutschlandfunk"* isn't *"Deutschlandfunk Kultur"*.
    - *"stop the radio"*, *"turn off the radio"*: `Off`.
 
    It only sets the dropdown; the FM radio automation plays it, which takes a few
-   seconds. Asking for the station that's already selected goes through `Off` first, so
+   seconds (up to a minute for the first DAB+ station). Asking for the station that's already selected goes through `Off` first, so
    it plays again even if it had stopped.
 
    ```yaml

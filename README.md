@@ -128,7 +128,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `frpc` | Tunnels Home Assistant to the remote frps server | — (remote 6301) | Tunnels defined in `stacks/frpc/frpc.toml`; mTLS certificates in `/srv/frpc/certs` |
 | `homeassistant` | Home Assistant, Mosquitto (MQTT), Zigbee2MQTT and Music Assistant | 8123, 8095, 8097, 3483 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; `musicassistant.local.ber.nvcode.com` with Music Assistant's own login (8097 is its stream server, 3483 its Squeezelite server, for the players; the Echo plays through Squeezelite on the host, [step 23](#23-play-music-assistant-on-the-amazon-echo-over-bluetooth)); music library in `/srv/music`; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Home Assistant's tag is a monthly release, updated deliberately |
 | `homarr` | Dashboard with links and widgets for the services | — | `homarr.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/homarr`. Reads and controls Docker through the socket. Pinned to an exact release (no major-version tag), updated deliberately |
-| `fmradio` | FM radio from an RTL-SDR dongle, as an MP3 stream for Music Assistant | 8099 (localhost only) | `http://127.0.0.1:8099/<MHz>` tunes to a station, mono. Image built from the stack's `Dockerfile` (Alpine, about 250 MB); see [step 24](#24-listen-to-fm-radio-with-an-rtl-sdr-dongle) |
+| `fmradio` | FM and DAB+ radio from an RTL-SDR dongle, as an MP3 stream for Music Assistant | 8099 (localhost only) | `http://127.0.0.1:8099/<MHz>` tunes to an FM station (mono), `/<DAB+ block>?name=<station>` to a DAB+ one. Image built from the stack's `Dockerfile` (Debian, about 680 MB, mostly welle-cli's packaged dependencies); see [step 24](#24-listen-to-fm-and-dab-radio-with-an-rtl-sdr-dongle) |
 | `wyoming` | Speech to text (faster-whisper) and text to speech (Piper) for Home Assistant's Assist | 10300, 10200 (localhost only) | English; models in `/srv/wyoming`. Whisper uses about 0.5 GB of memory. Exact releases (no version-line tags), updated deliberately; see [step 25](#25-set-up-a-voice-assistant) |
 
 ## Setup log
@@ -1006,27 +1006,51 @@ Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first sus
    listens on port 3483, and the player `Echo` shows up. Through the Music Assistant
    integration, Home Assistant gets it as a media player too (`media_player.echo`).
 
-### 24. Listen to FM radio with an RTL-SDR dongle
+### 24. Listen to FM and DAB+ radio with an RTL-SDR dongle
 
 The dongle is a DollarTek RTL-SDR USB 2.0 stick
 ([Amazon B07DJT5NHD](https://www.amazon.de/-/en/dp/B07DJT5NHD)): a Realtek RTL2832U
 demodulator with a Rafael Micro R820T2 tuner. It shows up as `0bda:2838 Realtek
-Semiconductor Corp. RTL2838 DVB-T`. It receives FM, and the `fmradio` stack turns a
-station into an MP3 stream: `http://127.0.0.1:8099/95.8?name=radioeins` tunes to
-95.8 MHz and streams it until the client disconnects. `name` goes into the stream's
-title tag and `icy-name` header, which Music Assistant shows instead of the URL. Music Assistant plays it like an internet radio station,
-on any of its players. There is one dongle, so only one station plays at a time:
-requests for the playing station share it, and a request for another one retunes.
+Semiconductor Corp. RTL2838 DVB-T`. It receives FM and DAB+, and the `fmradio` stack
+turns a station into an MP3 stream until the client disconnects:
+
+- FM: `http://127.0.0.1:8099/95.8?name=radioeins` tunes to 95.8 MHz. `rtl_fm`
+  demodulates it (mono only, which makes no difference on the Echo) and `lame`
+  encodes it; a few percent of one CPU core.
+- DAB+: `http://127.0.0.1:8099/5C?name=Radio%20BOB!` plays the station called that
+  in block 5C. DAB+ sends a whole block of stations on one frequency;
+  [welle-cli](https://github.com/AlbrechtL/welle.io) receives the block and streams
+  the station asked for. `name` is matched against the names the block broadcasts,
+  ignoring case, spaces and punctuation. welle-cli takes about 30 % of one CPU core
+  and 55 MB of memory while playing. Starting cold takes up to a minute, until the
+  block lists the station; switching to another block takes 5–15 s.
+
+`name` also goes into the stream's title tag and `icy-name` header, which Music
+Assistant shows instead of the URL. Music Assistant plays it like an internet radio
+station, on any of its players. There is one dongle, so only one station plays at a
+time, FM or DAB+: requests for the playing station share it, and a request for
+another one retunes.
 
 Starting and stopping the tuner in quick succession hung the dongle until it was
 unplugged (`usb 1-8: device descriptor read/64, error -110` in `dmesg`, and `rtl_fm`
 reports `No supported devices found`). Music Assistant opens a stream several times
-in a row when it starts it, so the service keeps the tuner running for 15 s after the
-last client is gone, and waits 2 s after stopping it before starting it again. A
+in a row when it starts it, so the service keeps the station playing for 15 s after
+the last client is gone, and waits 2 s after releasing the dongle before starting it
+again. Between DAB+ stations, welle-cli keeps running and switches blocks itself. A
 retune ends the previous station's stream, and Music Assistant's player then
 reconnects to it, which would retune straight back; so for 10 s after a retune the
-previous station is refused (HTTP 503). `rtl_fm` only demodulates mono, which makes no difference
-on the Echo. Decoding and encoding take a few percent of one CPU core while playing.
+previous station is refused (HTTP 503).
+
+Berlin's DAB+ blocks, scanned from the server in November 2026 with the dongle's
+small antenna indoors; all five came in, with a signal-to-noise ratio of 15–22 dB:
+
+| Block | MHz | Ensemble | Stations |
+|-------|-----|----------|----------|
+| 5C | 178.352 | DR Deutschland | Dlf, Dlf Kultur, Dlf Nova, DRadio DokDeb, Absolut relax, ASA DE, ENERGY, ERF Plus, KLASSIK RADIO, RADIO BOB!, radio horeb, SCHLAGERPARADIES, Schwarzwaldradio, SUNSHINE LIVE |
+| 5D | 180.064 | Antenne DE | 80s80s, 8090er OLDIE ANT, 90s90s, Absolut BELLA, Absolut CLASSICS, Absolut GERMANY, Absolut HOT, Absolut TOP 2000, AIDAradio, BALLERMANN RADIO, Beats Radio, Brillux Radio, NOSTALGIE, ROCK ANTENNE, RTL RADIO, TOGGO Radio |
+| 7B | 190.640 | Berlin/BRBG 7B | \*STAR\*SAT\*RADIO\*, 106.8 pure fm, 60er70er GOLD, ByteFM, DISCOFOX ANTENNE, ELLA, FG CHIC.de, JAM FM, JazzRadio Berlin, MEGARADIOmix.de, Metropol FM, NIUS - Das Radio, RADIO ORIENT, RADIO TEDDY, Radio Holiday, Radio Paradiso |
+| 7D | 194.064 | rbb Berlin K7D | Antenne P, BR Heimat, BR Klassik, COSMO, FR-BB & 24/3, Fritz, radio1, radio3 vom rbb, rbb 88.8, rbb24 Inforadio, WDR Maus |
+| 12D | 229.072 | Berlin/BRBG K12D | 104.6RTL, 105'5 SPREERADIO, 98.8 KISS FM, ALEX RADIO, BB RADIO, bigFM, BOLLERWAGEN, BRF 91.4, ENERGY BERLIN, POWER RADIO, RADIO GINSENG, Radio BHeins, Radio Cottbus, Radio Paloma, RADIO POTSDAM, STAR FM MAX ROCK |
 
 1. Keep the kernel's DVB-T TV driver off the dongle. It would claim it, and `rtl_fm`
    then fails with `usb_claim_interface error -6`:
@@ -1045,17 +1069,33 @@ on the Echo. Decoding and encoding take a few percent of one CPU core while play
 
    ```bash
    curl -s -m 10 http://127.0.0.1:8099/95.8 -o /tmp/test.mp3; ls -l /tmp/test.mp3   # ~150 KB
+   curl -s -m 60 'http://127.0.0.1:8099/7D?name=Fritz' -o /tmp/test.mp3; ls -l /tmp/test.mp3   # some 100 KB
    ```
 
-   Distorted, as if not quite tuned in: the tuner is overloaded. Automatic gain turns it
+   Distorted FM, as if not quite tuned in: the tuner is overloaded. Automatic gain turns it
    up too far for strong transmitters; `GAIN` in `compose.yaml` fixes it (20 dB here,
    picked by ear from test recordings at 10, 20, 30 dB and auto). Silence or hiss: the
    antenna. The dongle's clock is 15–40 ppm off (`rtl_test -p`), which is 2–4 kHz at
-   100 MHz and doesn't matter for FM; `PPM` would correct it.
+   100 MHz and doesn't matter for FM; `PPM` would correct it. DAB+ uses automatic
+   gain and corrects the clock itself. A DAB+ station that never starts (the log says
+   `<name> not found in block <block>`): its name differs from what the block
+   broadcasts, or the block doesn't come in. DAB+ is at 175–230 MHz, so a telescopic
+   antenna works best at about 35–40 cm there, against about 75 cm for FM.
+
+   To see what a block broadcasts, run welle-cli's own web interface with the stack
+   stopped (it needs the dongle), and open it through an SSH tunnel
+   (`ssh -L 7979:127.0.0.1:7979 …`) at `http://localhost:7979`:
+
+   ```bash
+   docker compose stop
+   docker run --rm -p 127.0.0.1:7979:7979 -v /dev/bus/usb:/dev/bus/usb \
+     --device-cgroup-rule='c 189:* rmw' fmradio:local welle-cli -c 7D -w 7979
+   # Ctrl-C, then: docker compose start
+   ```
 
 3. Optionally, add stations to Music Assistant's library, to pick them in its own app:
-   under *Library → Radio*, add an item from a URL, `http://127.0.0.1:8099/<MHz>`, and
-   name it. Home Assistant doesn't need them (see `HOMEASSISTANT.md`).
+   under *Library → Radio*, add an item from a URL, `http://127.0.0.1:8099/<MHz>` or
+   `http://127.0.0.1:8099/<block>?name=<station>`, and name it. Home Assistant doesn't need them (see `HOMEASSISTANT.md`).
 
 ### 25. Set up a voice assistant
 

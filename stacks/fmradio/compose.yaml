@@ -1,7 +1,8 @@
 services:
   fmradio:
-    # Built from the Dockerfile here: rtl_fm tunes the dongle, ffmpeg encodes MP3,
-    # fmradio.py serves it at http://127.0.0.1:8099/<MHz>
+    # Built from the Dockerfile here: rtl_fm and lame (FM) or welle-cli (DAB+) receive
+    # with the dongle, fmradio.py serves MP3 at http://127.0.0.1:8099/<MHz> and
+    # /<DAB+ block>?name=<station>
     build: .
     image: fmradio:local
     restart: unless-stopped
@@ -19,6 +20,6 @@ services:
       # Frequency correction of the dongle in ppm; measured at 15–40, too little to matter
       # for FM
       PPM: 0
-      # Tuner gain in dB (empty: auto). Auto overloads on Berlin's strong transmitters
-      # and sounds off-station; 20 sounded cleanest
+      # FM tuner gain in dB (empty: auto). Auto overloads on Berlin's strong
+      # transmitters and sounds off-station; 20 sounded cleanest. DAB+ uses auto gain
       GAIN: 20
