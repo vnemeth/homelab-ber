@@ -73,6 +73,18 @@ services:
     depends_on:
       - mosquitto
 
+  music-assistant-server:
+    image: ghcr.io/music-assistant/server:latest
+    container_name: music-assistant-server
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /srv/homeassistant/musicassistan/data:/data/
+      # Uncomment the line below if you have local music files to map
+      - /srv/music:/media:ro
+    environment:
+      - LOG_LEVEL=info
+
 networks:
   proxy:
     external: true
