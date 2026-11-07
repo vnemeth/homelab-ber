@@ -16,6 +16,9 @@ services:
       # USB devices
       - c 189:* rmw
     environment:
-      # Frequency correction of the dongle in ppm, and tuner gain in dB (empty: auto)
+      # Frequency correction of the dongle in ppm; measured at 15–40, too little to matter
+      # for FM
       PPM: 0
-      GAIN: ""
+      # Tuner gain in dB (empty: auto). Auto overloads on Berlin's strong transmitters
+      # and sounds off-station; 20 sounded cleanest
+      GAIN: 20

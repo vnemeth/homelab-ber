@@ -1008,7 +1008,7 @@ on the Echo. Decoding and encoding take a few percent of one CPU core while play
    echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/rtl-sdr-blacklist.conf
    # If the dongle is already plugged in (or unplug and replug it)
    sudo modprobe -r rtl2832_sdr dvb_usb_rtl28xxu
-   lsmod | grep -E 'dvb|rtl2832'        # nothing
+   lsmod | grep dvb_usb                 # nothing; leftovers like rtl2832 or dvb_core are unused
    ```
 
 2. Deploy the `fmradio` stack in Dockge. Dockge builds the image from the stack's
@@ -1020,8 +1020,11 @@ on the Echo. Decoding and encoding take a few percent of one CPU core while play
    curl -s -m 10 http://127.0.0.1:8099/95.8 -o /tmp/test.mp3; ls -l /tmp/test.mp3   # ~150 KB
    ```
 
-   Silence or hiss: the dongle's antenna, or its frequency is off. Most dongles are
-   within a few ppm; `PPM` in `compose.yaml` corrects it.
+   Distorted, as if not quite tuned in: the tuner is overloaded. Automatic gain turns it
+   up too far for strong transmitters; `GAIN` in `compose.yaml` fixes it (20 dB here,
+   picked by ear from test recordings at 10, 20, 30 dB and auto). Silence or hiss: the
+   antenna. The dongle's clock is 15–40 ppm off (`rtl_test -p`), which is 2–4 kHz at
+   100 MHz and doesn't matter for FM; `PPM` would correct it.
 
 3. Optionally, add stations to Music Assistant's library, to pick them in its own app:
    under *Library → Radio*, add an item from a URL, `http://127.0.0.1:8099/<MHz>`, and
