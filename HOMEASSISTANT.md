@@ -756,7 +756,11 @@ Echo (`media_player.echo`). One station plays at a time.
    refuses it for that long after a retune
    ([README step 24](README.md#24-listen-to-fm-radio-with-an-rtl-sdr-dongle)).
 
-3. **Dashboard** `Music` (`dashboard-music`): a tile for `input_select.fm_station` with
-   the dropdown (*select options* feature), and a tile for `media_player.echo` with
-   playback controls and volume.
+3. **Dashboard** `Music` (`dashboard-music`):
+   - a tile for `input_select.fm_station` with the dropdown (*select options* feature);
+   - a *Browse music* shortcut card, which opens the media browser for the Echo
+     (`/media-browser/media_player.echo`): Music Assistant's library by artists,
+     albums, tracks and playlists, played on the Echo;
+   - a media control card for `media_player.echo`: cover, title, playback controls; tap
+     it for volume.
 
