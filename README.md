@@ -858,40 +858,75 @@ level. They need a few MB of memory.
 The adapter is an Intel Wi-Fi/Bluetooth combo and the server is on Wi-Fi: streaming over
 Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first suspect.
 
-1. Install BlueALSA and Squeezelite, and stop the package's own Squeezelite instance:
+1. Install BlueALSA and Squeezelite, and stop the package's own Squeezelite instance for
+   good. It runs as `lab` on the server's sound card, and `disable` alone left it running;
+   masked, it can't start at all. Music Assistant would also see both instances as one
+   player, since Squeezelite uses the host's MAC address as its ID by default.
 
    ```bash
-   sudo apt install bluez-alsa-utils libasound2-plugin-bluez squeezelite
-   sudo systemctl disable --now squeezelite
+   sudo apt install bluez-alsa-utils libasound2-plugin-bluez squeezelite alsa-utils
+   sudo systemctl stop squeezelite
+   sudo systemctl mask squeezelite
    dpkg -l pulseaudio-module-bluetooth    # should not be installed
    ```
 
-2. Check `/etc/default/bluez-alsa`: the options must include `-p a2dp-source` (the server
-   sends audio to the Echo). Add it if they don't, then `sudo systemctl restart bluealsa`.
-   Note which group `/usr/share/dbus-1/system.d/bluealsa.conf` lets use BlueALSA
-   (`grep group= /usr/share/dbus-1/system.d/bluealsa.conf`); Squeezelite runs in it below.
-
-3. Pair the Echo. Say *"Alexa, pair"*; it announces that it's ready. Then:
+2. BlueALSA may only offer the **source** role (sending audio). Debian's unit starts it
+   with `-p a2dp-source -p a2dp-sink`, and with both, the Echo, which can also send audio,
+   connects the wrong way round: as a source playing to the server. `OPTIONS` in
+   `/etc/default/bluez-alsa` only adds to the command line, so an override replaces it:
 
    ```bash
-   bluetoothctl
-   scan on                    # wait for the Echo to show up, e.g. "Echo-XXX", and note its address
-   pair XX:XX:XX:XX:XX:XX
-   trust XX:XX:XX:XX:XX:XX
-   connect XX:XX:XX:XX:XX:XX
-   scan off
-   quit
+   sudo mkdir -p /etc/systemd/system/bluealsa.service.d
+   printf '[Service]\nExecStart=\nExecStart=/usr/bin/bluealsa -S -p a2dp-source\n' | sudo tee /etc/systemd/system/bluealsa.service.d/override.conf
+   sudo systemctl daemon-reload
+   sudo systemctl restart bluealsa
+   bluealsa-cli status                                     # Profiles: only A2DP-source : SBC
+   grep group= /usr/share/dbus-1/system.d/bluealsa.conf    # <policy group="audio">
    ```
 
-   Test it, with the Echo's address:
+   Its D-Bus policy lets the `audio` group use it, which Squeezelite runs in below.
+
+3. Pair the Echo. The Echo `Echo-0CB` is `08:91:15:BB:3A:B9` (its classic Bluetooth
+   address, with *Audio Sink*; it also shows up under a changing Bluetooth LE address,
+   which is no use for audio).
+   - Pairing mode only comes from the Alexa app: *Geräte → Echo & Alexa → the Echo →
+     Bluetooth-Geräte → Neues Gerät koppeln*. *"Alexa, koppeln"* doesn't do it (in
+     German, it only reconnects to devices the Echo already knows).
+   - The server pairs **once** and then only connects. Pairing again while connected
+     makes the Echo reject it, and the server loses the key while the Echo keeps it;
+     then remove `lab` in the Alexa app and on the server, and start over.
+   - Connecting right after pairing can be refused once or twice before it goes through.
+
+   Start a scan, tap *Neues Gerät koppeln*, and as soon as the Echo shows up:
 
    ```bash
-   bluealsa-aplay -L          # lists the Echo
-   speaker-test -D bluealsa:DEV=XX:XX:XX:XX:XX:XX,PROFILE=a2dp -c 2 -t wav -l 1
+   bluetoothctl --timeout 120 scan on &    # until "Echo-0CB" shows up
+   bluetoothctl pair 08:91:15:BB:3A:B9
+   bluetoothctl trust 08:91:15:BB:3A:B9
+   bluetoothctl connect 08:91:15:BB:3A:B9  # repeat if refused; the Echo says "mit lab verbunden"
    ```
 
-4. Squeezelite as a service, in `/etc/systemd/system/squeezelite-echo.service`. Use the
-   Echo's address, and the group from step 2 if it isn't `audio`:
+   *lab* then shows as connected under the Echo's Bluetooth devices in the app. Test it:
+
+   ```bash
+   bluealsa-cli list-pcms    # .../dev_08_91_15_BB_3A_B9/a2dpsrc/sink
+   speaker-test -D bluealsa:DEV=08:91:15:BB:3A:B9,PROFILE=a2dp -c 2 -t wav -l 1
+   ```
+
+   `a2dpsnk/source` instead of `a2dpsrc/sink` means it connected the wrong way round
+   (step 2).
+
+4. Squeezelite as a service. It runs as its own system user in `audio`. A `DynamicUser`
+   with `SupplementaryGroups=audio` doesn't work: D-Bus looks group membership up in
+   `/etc/group`, so BlueALSA refuses it (`playback open error: Connection …`).
+
+   ```bash
+   sudo useradd --system --no-create-home --shell /usr/sbin/nologin --groups audio squeezelite
+   ```
+
+   `/etc/systemd/system/squeezelite-echo.service`. The log line
+   `Failed to create secure directory (//.config/pulse)` is ALSA's PulseAudio plugin
+   looking for a home directory, and harmless.
 
    ```ini
    [Unit]
@@ -900,10 +935,10 @@ Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first sus
    After=bluealsa.service network-online.target
 
    [Service]
-   DynamicUser=yes
-   SupplementaryGroups=audio
-   # -s: Music Assistant on this host; -C 5: release the Echo 5 s after playback stops
-   ExecStart=/usr/bin/squeezelite -n Echo -s 127.0.0.1 -C 5 -o bluealsa:DEV=XX:XX:XX:XX:XX:XX,PROFILE=a2dp
+   User=squeezelite
+   # -s: Music Assistant on this host; -m: its own player ID (otherwise the host's MAC);
+   # -C 5: release the Echo 5 s after playback stops
+   ExecStart=/usr/bin/squeezelite -n Echo -m 02:ec:00:00:00:01 -s 127.0.0.1 -C 5 -o bluealsa:DEV=08:91:15:BB:3A:B9,PROFILE=a2dp
    Restart=always
    RestartSec=10
 
@@ -924,7 +959,7 @@ Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first sus
    [Service]
    Type=oneshot
    # "-": a failed attempt (Echo off or out of range) isn't an error
-   ExecStart=-/bin/sh -c 'bluetoothctl info XX:XX:XX:XX:XX:XX | grep -q "Connected: yes" || bluetoothctl connect XX:XX:XX:XX:XX:XX'
+   ExecStart=-/bin/sh -c 'bluetoothctl info 08:91:15:BB:3A:B9 | grep -q "Connected: yes" || bluetoothctl connect 08:91:15:BB:3A:B9'
    ```
 
    and `/etc/systemd/system/echo-bluetooth-connect.timer`:
@@ -951,4 +986,4 @@ Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first sus
 
 7. In Music Assistant, *Settings → Providers → Add*, add **Squeezelite** (slimproto). It
    listens on port 3483, and the player `Echo` shows up. Through the Music Assistant
-   integration, Home Assistant gets it as a media player too.
+   integration, Home Assistant gets it as a media player too (`media_player.echo`).
