@@ -1,3 +1,6 @@
 # Real environment files hold secrets and stay on the server; commit .env.example instead
 .env
 __pycache__/
+# ESPHome: secrets stay on the server, and its build output
+esphome/secrets.yaml
+esphome/.esphome/

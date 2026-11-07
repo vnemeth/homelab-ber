@@ -1,0 +1,26 @@
+services:
+  # Speech to text for Home Assistant's Assist
+  whisper:
+    # No version-line tag is published, so this is an exact release, updated deliberately
+    image: rhasspy/wyoming-whisper:3.8.1
+    restart: unless-stopped
+    # small-int8: accurate enough for English commands, about 0.5 GB of memory
+    command: --model small-int8 --language en
+    # Only Home Assistant (host network) uses it
+    ports:
+      - 127.0.0.1:10300:10300
+    volumes:
+      # Downloaded models
+      - /srv/wyoming/whisper:/data
+
+  # Text to speech
+  piper:
+    # No version-line tag is published, so this is an exact release, updated deliberately
+    image: rhasspy/wyoming-piper:2.5.2
+    restart: unless-stopped
+    command: --voice en_US-lessac-medium
+    ports:
+      - 127.0.0.1:10200:10200
+    volumes:
+      # Downloaded voices
+      - /srv/wyoming/piper:/data

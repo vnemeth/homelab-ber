@@ -111,6 +111,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 ├── AGENTS.md         # Instructions for AI coding agents working in this repo
 ├── HOMEASSISTANT.md  # Home Assistant's helpers, automations and dashboards
 ├── ZIGBEE.md         # The Zigbee coordinator and devices
+├── esphome/          # ESPHome firmware configs, flashed from the server (step 25)
 └── stacks/           # One folder per Docker Compose stack, managed by Dockge
 ```
 
@@ -128,6 +129,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `homeassistant` | Home Assistant, Mosquitto (MQTT), Zigbee2MQTT and Music Assistant | 8123, 8095, 8097, 3483 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; `musicassistant.local.ber.nvcode.com` with Music Assistant's own login (8097 is its stream server, 3483 its Squeezelite server, for the players; the Echo plays through Squeezelite on the host, [step 23](#23-play-music-assistant-on-the-amazon-echo-over-bluetooth)); music library in `/srv/music`; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Home Assistant's tag is a monthly release, updated deliberately |
 | `homarr` | Dashboard with links and widgets for the services | — | `homarr.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/homarr`. Reads and controls Docker through the socket. Pinned to an exact release (no major-version tag), updated deliberately |
 | `fmradio` | FM radio from an RTL-SDR dongle, as an MP3 stream for Music Assistant | 8099 (localhost only) | `http://127.0.0.1:8099/<MHz>` tunes to a station, mono. Image built from the stack's `Dockerfile` (Alpine, about 250 MB); see [step 24](#24-listen-to-fm-radio-with-an-rtl-sdr-dongle) |
+| `wyoming` | Speech to text (faster-whisper) and text to speech (Piper) for Home Assistant's Assist | 10300, 10200 (localhost only) | English; models in `/srv/wyoming`. Whisper uses about 0.5 GB of memory. Exact releases (no version-line tags), updated deliberately; see [step 25](#25-set-up-a-voice-assistant) |
 
 ## Setup log
 
@@ -1054,4 +1056,46 @@ on the Echo. Decoding and encoding take a few percent of one CPU core while play
 3. Optionally, add stations to Music Assistant's library, to pick them in its own app:
    under *Library → Radio*, add an item from a URL, `http://127.0.0.1:8099/<MHz>`, and
    name it. Home Assistant doesn't need them (see `HOMEASSISTANT.md`).
+
+### 25. Set up a voice assistant
+
+A Waveshare ESP32-S3-AUDIO-Board (four microphones, a speaker, seven LEDs, three keys)
+works as a Home Assistant voice satellite. It runs ESPHome: it listens for the wake word
+*"Okay Nabu"* itself, then streams the request to Home Assistant, which turns it into
+text, acts on it, and sends the spoken reply back. Speech runs locally, in the
+`wyoming` stack. The board is on Wi-Fi; USB is only for power and the first flash.
+
+It came with the XiaoZhi firmware, a Chinese AI assistant that talks to its own cloud.
+Flashing ESPHome replaces it.
+
+1. Deploy the `wyoming` stack in Dockge. On first start, whisper downloads its model and
+   Piper its voice into `/srv/wyoming`; the logs show when they're ready.
+
+2. Secrets for the board, in the repo checkout on the server (git-ignored):
+
+   ```bash
+   cd /opt/homelab-ber/esphome
+   cp secrets.yaml.example secrets.yaml
+   openssl rand -base64 32    # → api_encryption_key
+   nano secrets.yaml          # Wi-Fi name and password, the key, a fallback hotspot password
+   ```
+
+3. Flash it over USB from the server with ESPHome's image, without an ESPHome stack
+   (`esphome/voice-satellite.yaml`). The first build downloads the toolchain and takes
+   10–15 minutes; it's kept in `/srv/esphome/cache`, and the build output in
+   `esphome/.esphome` (git-ignored):
+
+   ```bash
+   cd /opt/homelab-ber/esphome
+   docker run --rm -v "$PWD":/config -v /srv/esphome/cache:/cache \
+     --device /dev/ttyACM0 esphome/esphome:2026.10 \
+     run voice-satellite.yaml --device /dev/ttyACM0
+   ```
+
+   It then shows the board's log; it should connect to Wi-Fi. `Ctrl+C` ends the log.
+   Later changes can go over Wi-Fi: the same command without `--device`.
+
+4. Home Assistant finds it: *Settings → Devices & services*, *ESPHome* under
+   *Discovered*. Adding it asks for `api_encryption_key`. The Assist pipeline it uses
+   is in `HOMEASSISTANT.md`.
 
