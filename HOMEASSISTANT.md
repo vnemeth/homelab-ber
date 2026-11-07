@@ -630,3 +630,100 @@ actions:
             data:
               color_temp_kelvin: "{{ [kelvin + step, kelvin_max] | min }}"
 ```
+
+## Music
+
+### FM radio
+
+FM comes from the RTL-SDR dongle through the `fmradio` stack
+([README step 24](README.md#24-listen-to-fm-radio-with-an-rtl-sdr-dongle)):
+`http://127.0.0.1:8099/<MHz>` streams a station, and Music Assistant plays it on the
+Echo (`media_player.echo`). One station plays at a time.
+
+1. **Station:** *Create helper → Dropdown*, named `FM station`
+   (`input_select.fm_station`). The options start with the frequency, which the
+   automation reads, and are sorted like a radio dial; `Off` stops playback. Berlin's
+   stations as of November 2026:
+
+   ```
+   Off
+   87.9 Star FM
+   88.4 88vier
+   88.8 rbb 88.8
+   89.2 Radio Potsdam
+   89.6 Deutschlandfunk Kultur
+   90.2 Radio Teddy
+   91.0 ALEX Radio
+   91.4 Berliner Rundfunk
+   92.4 radio3
+   93.1 rbb24 Inforadio
+   93.6 JAM FM
+   94.3 rs2
+   94.8 BBC World Service
+   95.8 radioeins
+   96.3 COSMO
+   96.7 RFI
+   97.2 Golos Berlina
+   97.7 Deutschlandfunk
+   98.2 Radio Paradiso
+   98.8 KISS FM
+   99.7 Antenne Brandenburg
+   100.6 FluxFM
+   102.6 Fritz
+   103.4 Energy Berlin
+   104.6 104.6 RTL
+   105.5 Spreeradio
+   106.0 Schlager Radio
+   106.8 JazzRadio
+   107.5 BB Radio
+   ```
+
+2. **Automation:** picking a station plays it; when the Echo has stopped playing for a
+   minute (stopped from the Music Assistant app, or another source took over), the
+   dropdown goes back to `Off`, so picking the same station again plays it again.
+   `restart` mode: a new pick replaces one that is still starting.
+
+   ```yaml
+   alias: FM radio
+   description: >-
+     Plays the station picked in FM station on the Echo, from the fmradio stack; Off
+     stops it. Resets to Off once the Echo has stopped for a minute.
+   mode: restart
+   triggers:
+     - trigger: state
+       entity_id: input_select.fm_station
+       id: station
+     - trigger: media_player.stopped_playing
+       target:
+         entity_id: media_player.echo
+       options:
+         for: "00:01:00"
+       id: stopped
+   actions:
+     - choose:
+         - conditions:
+             - condition: trigger
+               id: stopped
+           sequence:
+             - action: input_select.select_option
+               target:
+                 entity_id: input_select.fm_station
+               data:
+                 option: "Off"
+         - conditions:
+             - condition: state
+               entity_id: input_select.fm_station
+               state: "Off"
+           sequence:
+             - action: media_player.media_stop
+               target:
+                 entity_id: media_player.echo
+       default:
+         - action: music_assistant.play_media
+           target:
+             entity_id: media_player.echo
+           data:
+             media_id: "http://127.0.0.1:8099/{{ trigger.to_state.state.split(' ')[0] }}"
+             media_type: radio
+   ```
+

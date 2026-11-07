@@ -1,13 +1,22 @@
 """Streams FM radio from an RTL-SDR dongle over HTTP, as MP3.
 
-GET /<MHz>, e.g. /95.8, tunes to that station and streams it until the client
-disconnects. There is one dongle, so a new request takes it over from the
-previous one.
+GET /<MHz>, e.g. /95.8, streams that station until the client disconnects.
+There is one dongle, so one station plays at a time: clients asking for the
+playing station share it, and asking for another one retunes, which ends the
+others' streams.
+
+Starting and stopping rtl_fm in quick succession can hang the dongle until
+it's unplugged, and players connect several times in a row when they start a
+stream (to probe it, then to play it). So the tuner keeps running for LINGER
+seconds after the last client is gone, and waits SETTLE seconds after it
+stopped before it starts again.
 """
 
 import os
+import queue
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8099"))
@@ -16,52 +25,108 @@ PPM = os.environ.get("PPM", "0")
 # Tuner gain in dB; empty for automatic gain
 GAIN = os.environ.get("GAIN", "")
 BITRATE = os.environ.get("BITRATE", "128k")
-
-lock = threading.Lock()
-current = None  # (rtl_fm, ffmpeg) of the station that is playing
-
-
-def stop(pipeline):
-    for proc in pipeline:
-        proc.terminate()
-    for proc in pipeline:
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
+LINGER = 15
+SETTLE = 2
 
 
-def start(mhz):
-    global current
-    with lock:
-        # Free the dongle before tuning again
-        if current:
-            stop(current)
-        rtl_fm = subprocess.Popen(
+class Tuner:
+    """The running rtl_fm | ffmpeg pipeline, and the clients reading from it."""
+
+    def __init__(self, mhz):
+        self.mhz = mhz
+        self.clients = set()
+        # Its own lock, so stopping it under the global one doesn't block fan_out
+        self.lock = threading.Lock()
+        self.ended = False
+        self.rtl_fm = subprocess.Popen(
             ["rtl_fm", "-M", "wbfm", "-f", f"{mhz}M", "-r", "48000", "-p", PPM]
             + (["-g", GAIN] if GAIN else [])
             + ["-"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
         )
-        ffmpeg = subprocess.Popen(
+        self.ffmpeg = subprocess.Popen(
             ["ffmpeg", "-loglevel", "error", "-f", "s16le", "-ar", "48000", "-ac", "1",
              "-i", "pipe:0", "-c:a", "libmp3lame", "-b:a", BITRATE, "-f", "mp3", "pipe:1"],
-            stdin=rtl_fm.stdout,
+            stdin=self.rtl_fm.stdout,
             stdout=subprocess.PIPE,
         )
-        rtl_fm.stdout.close()
-        current = (rtl_fm, ffmpeg)
-        return current
+        self.rtl_fm.stdout.close()
+        threading.Thread(target=self.fan_out, daemon=True).start()
+
+    def fan_out(self):
+        while chunk := self.ffmpeg.stdout.read(4096):
+            with self.lock:
+                for client in self.clients:
+                    try:
+                        client.put_nowait(chunk)
+                    except queue.Full:
+                        pass  # a client that can't keep up loses audio
+        # The pipeline ended (stopped, or rtl_fm failed): tell the clients
+        with self.lock:
+            self.ended = True
+            for client in self.clients:
+                client.put(None)
+
+    def stop(self):
+        # SIGTERM lets rtl_fm release the dongle cleanly; ffmpeg then sees the end
+        # of its input
+        self.rtl_fm.terminate()
+        for proc in (self.rtl_fm, self.ffmpeg):
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
 
 
-def release(pipeline):
-    global current
+lock = threading.Lock()
+tuner = None
+stopped_at = 0.0
+linger_timer = None
+
+
+def stop_tuner():
+    global tuner, stopped_at
+    tuner.stop()
+    tuner = None
+    stopped_at = time.monotonic()
+
+
+def attach(mhz):
+    global tuner, linger_timer
     with lock:
-        if current is pipeline:
-            stop(pipeline)
-            current = None
+        if linger_timer:
+            linger_timer.cancel()
+            linger_timer = None
+        if tuner and (tuner.mhz != mhz or tuner.ended):
+            stop_tuner()
+        if not tuner:
+            time.sleep(max(0, stopped_at + SETTLE - time.monotonic()))
+            tuner = Tuner(mhz)
+        client = queue.Queue(maxsize=256)
+        with tuner.lock:
+            tuner.clients.add(client)
+            if tuner.ended:
+                client.put(None)
+        return tuner, client
+
+
+def detach(this, client):
+    global linger_timer
+    with lock:
+        with this.lock:
+            this.clients.discard(client)
+        if this is tuner and not this.clients:
+            linger_timer = threading.Timer(LINGER, linger_expired, [this])
+            linger_timer.start()
+
+
+def linger_expired(this):
+    global linger_timer
+    with lock:
+        if this is tuner and not this.clients:
+            stop_tuner()
+            linger_timer = None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -89,16 +154,16 @@ class Handler(BaseHTTPRequestHandler):
         mhz = self.parse_mhz()
         if not mhz:
             return
-        self.log_message("tuning to %s MHz", mhz)
-        pipeline = start(mhz)
+        this, client = attach(mhz)
+        self.log_message("playing %s MHz", mhz)
         self.send_stream_headers()
         try:
-            while chunk := pipeline[1].stdout.read(4096):
+            while chunk := client.get():
                 self.wfile.write(chunk)
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:
-            release(pipeline)
+            detach(this, client)
             self.log_message("stopped %s MHz", mhz)
 
 
