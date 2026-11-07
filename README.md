@@ -125,7 +125,7 @@ There is no disk swap. Swap is provided by zram (compressed swap in RAM).
 | `wud` | Reports available image updates | — | `wud.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/wud` |
 | `tailscale` | Remote access to the host and LAN | — | Host networking; subnet router for `192.168.2.0/24` and exit node; state in `/srv/tailscale` |
 | `frpc` | Tunnels Home Assistant to the remote frps server | — (remote 6301) | Tunnels defined in `stacks/frpc/frpc.toml`; mTLS certificates in `/srv/frpc/certs` |
-| `homeassistant` | Home Assistant, Mosquitto (MQTT), Zigbee2MQTT and Music Assistant | 8123, 8095, 8097 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; `musicassistant.local.ber.nvcode.com` with Music Assistant's own login (8097 is its stream server, for the players); music library in `/srv/music`; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Home Assistant's tag is a monthly release, updated deliberately |
+| `homeassistant` | Home Assistant, Mosquitto (MQTT), Zigbee2MQTT and Music Assistant | 8123, 8095, 8097, 3483 (host network), 1883 | `homeassistant.local.ber.nvcode.com` with Home Assistant's own login; `zigbee2mqtt.local.ber.nvcode.com` behind authentik; `musicassistant.local.ber.nvcode.com` with Music Assistant's own login (8097 is its stream server, 3483 its Squeezelite server, for the players; the Echo plays through Squeezelite on the host, [step 23](#23-play-music-assistant-on-the-amazon-echo-over-bluetooth)); music library in `/srv/music`; data in `/srv/homeassistant`. Home Assistant uses about 0.5 GB of memory. Home Assistant's tag is a monthly release, updated deliberately |
 | `homarr` | Dashboard with links and widgets for the services | — | `homarr.local.ber.nvcode.com`, login via authentik (OIDC); data in `/srv/homarr`. Reads and controls Docker through the socket. Pinned to an exact release (no major-version tag), updated deliberately |
 
 ## Setup log
@@ -837,3 +837,118 @@ and stop them.
 4. Open `https://homarr.local.ber.nvcode.com` and go through the onboarding. Give
    `authentik Admins` as the admin group, so its members get admin rights when they log in
    through authentik.
+
+### 23. Play Music Assistant on the Amazon Echo over Bluetooth
+
+The Echo (4th generation) works as a Bluetooth speaker. Music Assistant has no Bluetooth
+output of its own, so two host services connect it:
+
+- **BlueALSA** plays Bluetooth audio (A2DP) headless, from boot, through the same BlueZ
+  daemon that Home Assistant uses ([step 20](#20-install-bluez-for-home-assistants-bluetooth)).
+  PulseAudio only runs inside a desktop login, so it can't do this. Its Bluetooth module
+  (`pulseaudio-module-bluetooth`) must stay uninstalled: it would claim the A2DP profiles
+  from BlueALSA.
+- **Squeezelite** is a Music Assistant player (Squeezebox protocol) that outputs to the
+  Echo through BlueALSA. Debian only ships an init script for it, so it gets its own
+  systemd unit.
+
+Both run on the host rather than in Docker, since the Bluetooth radio and audio are host
+level. They need a few MB of memory.
+
+The adapter is an Intel Wi-Fi/Bluetooth combo and the server is on Wi-Fi: streaming over
+Bluetooth can cost Wi-Fi throughput. If playback drops out, that's the first suspect.
+
+1. Install BlueALSA and Squeezelite, and stop the package's own Squeezelite instance:
+
+   ```bash
+   sudo apt install bluez-alsa-utils libasound2-plugin-bluez squeezelite
+   sudo systemctl disable --now squeezelite
+   dpkg -l pulseaudio-module-bluetooth    # should not be installed
+   ```
+
+2. Check `/etc/default/bluez-alsa`: the options must include `-p a2dp-source` (the server
+   sends audio to the Echo). Add it if they don't, then `sudo systemctl restart bluealsa`.
+   Note which group `/usr/share/dbus-1/system.d/bluealsa.conf` lets use BlueALSA
+   (`grep group= /usr/share/dbus-1/system.d/bluealsa.conf`); Squeezelite runs in it below.
+
+3. Pair the Echo. Say *"Alexa, pair"*; it announces that it's ready. Then:
+
+   ```bash
+   bluetoothctl
+   scan on                    # wait for the Echo to show up, e.g. "Echo-XXX", and note its address
+   pair XX:XX:XX:XX:XX:XX
+   trust XX:XX:XX:XX:XX:XX
+   connect XX:XX:XX:XX:XX:XX
+   scan off
+   quit
+   ```
+
+   Test it, with the Echo's address:
+
+   ```bash
+   bluealsa-aplay -L          # lists the Echo
+   speaker-test -D bluealsa:DEV=XX:XX:XX:XX:XX:XX,PROFILE=a2dp -c 2 -t wav -l 1
+   ```
+
+4. Squeezelite as a service, in `/etc/systemd/system/squeezelite-echo.service`. Use the
+   Echo's address, and the group from step 2 if it isn't `audio`:
+
+   ```ini
+   [Unit]
+   Description=Squeezelite player for the Amazon Echo (Bluetooth)
+   Wants=bluealsa.service
+   After=bluealsa.service network-online.target
+
+   [Service]
+   DynamicUser=yes
+   SupplementaryGroups=audio
+   # -s: Music Assistant on this host; -C 5: release the Echo 5 s after playback stops
+   ExecStart=/usr/bin/squeezelite -n Echo -s 127.0.0.1 -C 5 -o bluealsa:DEV=XX:XX:XX:XX:XX:XX,PROFILE=a2dp
+   Restart=always
+   RestartSec=10
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+5. Reconnecting: the Echo doesn't connect back to the server by itself, after a reboot or
+   once it's been out of range. A timer connects it every minute if it isn't connected.
+   This also means it takes the Echo back from a phone connected over Bluetooth within a
+   minute. `/etc/systemd/system/echo-bluetooth-connect.service`:
+
+   ```ini
+   [Unit]
+   Description=Connect the Amazon Echo over Bluetooth if it isn't
+   After=bluetooth.service
+
+   [Service]
+   Type=oneshot
+   # "-": a failed attempt (Echo off or out of range) isn't an error
+   ExecStart=-/bin/sh -c 'bluetoothctl info XX:XX:XX:XX:XX:XX | grep -q "Connected: yes" || bluetoothctl connect XX:XX:XX:XX:XX:XX'
+   ```
+
+   and `/etc/systemd/system/echo-bluetooth-connect.timer`:
+
+   ```ini
+   [Unit]
+   Description=Keep the Amazon Echo connected over Bluetooth
+
+   [Timer]
+   OnBootSec=1min
+   OnUnitActiveSec=1min
+
+   [Install]
+   WantedBy=timers.target
+   ```
+
+6. Start both:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now echo-bluetooth-connect.timer squeezelite-echo.service
+   systemctl status squeezelite-echo
+   ```
+
+7. In Music Assistant, *Settings → Providers → Add*, add **Squeezelite** (slimproto). It
+   listens on port 3483, and the player `Echo` shows up. Through the Music Assistant
+   integration, Home Assistant gets it as a media player too.
