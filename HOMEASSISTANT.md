@@ -896,7 +896,10 @@ at a time.
 
 The voice satellite (Waveshare ESP32-S3-AUDIO-Board, `esphome/voice-satellite.yaml`,
 [README step 25](README.md#25-set-up-a-voice-assistant)) listens for *"Okay Nabu"* and
-hands the request to Assist. Key 2 on the board starts it without the wake word.
+hands the request to Assist. Key 2 on the board starts it without the wake word. How
+readily it wakes up is the device's *Wake word sensitivity* setting (*Default*, the
+model's own threshold; *Moderately sensitive*, the start; *Very sensitive*): more
+sensitive hears it better over music, and wakes up by mistake more often.
 
 1. **Speech services:** *Settings → Devices & services → Add integration → Wyoming
    Protocol*, twice: host `127.0.0.1`, port `10300` (faster-whisper,

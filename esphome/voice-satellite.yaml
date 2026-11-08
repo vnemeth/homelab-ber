@@ -147,6 +147,30 @@ media_player:
       - lambda: id(va).set_use_wake_word(false);
       - micro_wake_word.start:
 
+# How sure the wake word model must be (probability cutoff, out of 255). The model's
+# own 0.97 often missed "Okay Nabu" over the radio; lower wakes up more readily, and
+# more often by mistake
+select:
+  - platform: template
+    name: "Wake word sensitivity"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    options:
+      - Default
+      - Moderately sensitive
+      - Very sensitive
+    initial_option: Moderately sensitive
+    on_value:
+      - lambda: |-
+          if (x == "Default") {
+            id(okay_nabu).set_probability_cutoff(247);  // 0.97
+          } else if (x == "Moderately sensitive") {
+            id(okay_nabu).set_probability_cutoff(217);  // 0.85
+          } else {
+            id(okay_nabu).set_probability_cutoff(176);  // 0.69
+          }
+
 # 7 LEDs: show what the assistant is doing
 light:
   - platform: esp32_rmt_led_strip
@@ -186,7 +210,8 @@ micro_wake_word:
   vad:
     model: github://esphome/micro-wake-word-models/models/v2/vad.json
   models:
-    - okay_nabu
+    - model: okay_nabu
+      id: okay_nabu
   on_wake_word_detected:
     # A fallback still pending from the last request could restart the wake word
     # mid-request, which takes the shared I2S bus
