@@ -107,16 +107,20 @@ required section is filled in.
    ```
 
    Without the `heating` label, so it also works outside the heating season.
-5. **Comfort follows the outdoor temperature:** 1 °C warmer while it's cold outside and
-   I'm home. The comfort temperature is set on a helper, which an automation copies to
-   VTherm's comfort preset, adding 1 °C when it's cold. Don't set
+5. **Comfort follows the outdoor temperature:** warmer (by the cold boost, 1 °C) while
+   it's cold outside and I'm home. The comfort temperature is set on a helper, which an
+   automation copies to VTherm's comfort preset, adding the cold boost when it's cold. Don't set
    `number.central_configuration_preset_comfort_temp` directly; the automation
    overwrites it.
    - *Create helper → Number*, named `Heating comfort temperature`
      (`input_number.heating_comfort_temperature`), 15–25 °C, step 0.5, input field.
    - *Create helper → Number*, named `Outdoor cold threshold`
      (`input_number.outdoor_cold_threshold`), −7 to 7 °C, step 0.5, input field; set to
-     3 °C. Adjustable on the dashboard (*+1 °C below outdoor*).
+     3 °C. Adjustable on the dashboard (*Cold below*).
+   - *Create helper → Number*, named `Outdoor cold boost`
+     (`input_number.outdoor_cold_boost`), 0–3 °C, step 0.5, input field, icon
+     `mdi:thermometer-plus`; set to 1 °C. How much warmer comfort is while it's cold.
+     Adjustable on the dashboard (*Cold boost*).
    - *Create helper → Template → Binary sensor*, named `Outdoor cold`
      (`binary_sensor.outdoor_cold`), device class *Cold*. It turns on below the
      threshold and off only once it's 1 °C above it, so a forecast hovering around the
@@ -138,8 +142,8 @@ required section is filled in.
    alias: Heating comfort follows the outdoor temperature
    description: >-
      Versatile Thermostat's comfort temperature is the heating comfort temperature,
-     plus 1 °C while it's cold outside (binary_sensor.outdoor_cold: below the outdoor
-     cold threshold, back 1 °C above it) and Valentin is home.
+     plus the outdoor cold boost while it's cold outside (binary_sensor.outdoor_cold:
+     below the outdoor cold threshold, back 1 °C above it) and Valentin is home.
    mode: restart
    triggers:
      - trigger: event
@@ -147,7 +151,9 @@ required section is filled in.
      - trigger: homeassistant
        event: start
      - trigger: state
-       entity_id: input_number.heating_comfort_temperature
+       entity_id:
+         - input_number.heating_comfort_temperature
+         - input_number.outdoor_cold_boost
        not_to: [unavailable, unknown]
      - trigger: state
        entity_id:
@@ -167,7 +173,9 @@ required section is filled in.
            target:
              entity_id: number.central_configuration_preset_comfort_temp
            data:
-             value: "{{ states('input_number.heating_comfort_temperature') | float + 1 }}"
+             value: >-
+               {{ states('input_number.heating_comfort_temperature') | float
+                  + states('input_number.outdoor_cold_boost') | float(0) }}
        else:
          - action: number.set_value
            target:
@@ -176,7 +184,7 @@ required section is filled in.
              value: "{{ states('input_number.heating_comfort_temperature') }}"
    ```
 
-   The preset is central, so the extra degree applies to every room that uses the
+   The preset is central, so the cold boost applies to every room that uses the
    central presets.
 6. **Central mode** (`select.central_configuration_central_mode`): *Auto* in the heating
    season, *Stopped* outside it. The season automation sets it.
@@ -465,7 +473,8 @@ The automatic Overview (areas and summaries) takes no custom cards, so the heati
 own dashboard: *Settings → Dashboards → Add dashboard → New dashboard from scratch*,
 `Heating`. Cards are added with the **＋** in a section; Tile cards for the toggles, the
 comfort temperature (`input_number.heating_comfort_temperature`, see above), the outdoor
-cold threshold (`input_number.outdoor_cold_threshold`), the eco
+cold threshold and boost (`input_number.outdoor_cold_threshold`,
+`input_number.outdoor_cold_boost`, half width side by side), the eco
 preset temperature and the status sensors, a Thermostat card for
 `climate.n_v_bedroom` with the preset buttons, a Tile for the valve opening, and a
 History graph of the room temperature, the target and *heating active*. Set
@@ -655,7 +664,7 @@ actions:
 
 ## Music
 
-### FM radio
+### Radio
 
 FM and DAB+ come from the RTL-SDR dongle through the `fmradio` stack
 ([README step 24](README.md#24-listen-to-fm-and-dab-radio-with-an-rtl-sdr-dongle)):
@@ -664,41 +673,24 @@ one, and Music Assistant plays it on the Echo (`media_player.echo`). One station
 at a time.
 
 1. **Station:** *Create helper → Dropdown*, named `Radio station`
-   (`input_select.fm_station`; it was FM only at first). Each option starts with the
-   FM frequency or the DAB+ block, which the automation reads; for DAB+ the rest must
-   be the station's name as the block broadcasts it, ignoring case, spaces and
-   punctuation (the README lists them). `Off` stops playback. FM first, sorted like a
-   radio dial, then DAB+ stations that aren't on FM, as of November 2026:
+   (`input_select.radio_station`). Each option starts with the FM frequency or the
+   DAB+ block, which the automation reads; for DAB+ the rest must be the station's name
+   as the block broadcasts it, ignoring case, spaces and punctuation (the README lists
+   them). `Off` stops playback. FM first, sorted like a radio dial, then DAB+ stations
+   that aren't on FM, as of November 2026. Only stations that play here; the FM ones
+   that didn't work were removed:
 
    ```
    Off
-   87.9 Star FM
-   88.4 88vier
-   88.8 rbb 88.8
-   89.2 Radio Potsdam
-   89.6 Deutschlandfunk Kultur
-   90.2 Radio Teddy
-   91.0 ALEX Radio
    91.4 Berliner Rundfunk
-   92.4 radio3
-   93.1 rbb24 Inforadio
-   93.6 JAM FM
    94.3 rs2
-   94.8 BBC World Service
    95.8 radioeins
-   96.3 COSMO
-   96.7 RFI
-   97.2 Golos Berlina
    97.7 Deutschlandfunk
-   98.2 Radio Paradiso
-   98.8 KISS FM
    99.7 Antenne Brandenburg
    100.6 FluxFM
    102.6 Fritz
-   103.4 Energy Berlin
    104.6 104.6 RTL
    105.5 Spreeradio
-   106.0 Schlager Radio
    107.5 BB Radio
    5C Dlf Nova
    5C Sunshine Live
@@ -724,14 +716,14 @@ at a time.
    `restart` mode: a new pick replaces one that is still starting.
 
    ```yaml
-   alias: FM radio
+   alias: Radio
    description: >-
      Plays the station picked in Radio station on the Echo, from the fmradio stack; Off
      stops it. Resets to Off once the Echo has stopped for a minute.
    mode: restart
    triggers:
      - trigger: state
-       entity_id: input_select.fm_station
+       entity_id: input_select.radio_station
        id: station
      - trigger: media_player.stopped_playing
        target:
@@ -747,12 +739,12 @@ at a time.
            sequence:
              - action: input_select.select_option
                target:
-                 entity_id: input_select.fm_station
+                 entity_id: input_select.radio_station
                data:
                  option: "Off"
          - conditions:
              - condition: state
-               entity_id: input_select.fm_station
+               entity_id: input_select.radio_station
                state: "Off"
            sequence:
              - action: media_player.media_stop
@@ -771,7 +763,7 @@ at a time.
              media_type: radio
          - action: input_text.set_value
            target:
-             entity_id: input_text.fm_last_station
+             entity_id: input_text.radio_last_station
            data:
              value: "{{ trigger.to_state.state }}"
    ```
@@ -780,26 +772,25 @@ at a time.
    refuses it for that long after a retune
    ([README step 24](README.md#24-listen-to-fm-and-dab-radio-with-an-rtl-sdr-dongle)).
 
-3. **Last station:** *Create helper → Text*, named `FM last station`
-   (`input_text.fm_last_station`), max length 100. The FM radio automation stores each
+3. **Last station:** *Create helper → Text*, named `Radio last station`
+   (`input_text.radio_last_station`), max length 100. The Radio automation stores each
    station it plays there (`input_text.set_value` with `{{ trigger.to_state.state }}`
    after `play_media`), for *"play radio"* by voice.
 
-4. **By voice** ([Voice](#voice)): automation `FM radio by voice`, with Assist sentence
+4. **By voice** ([Voice](#voice)): automation `Radio by voice`, with Assist sentence
    triggers. They take precedence over Home Assistant's built-in sentences.
    - *"play radio"*, *"turn on the radio"*: the last station (radioeins if none yet).
-   - *"play radio fritz"*, *"play radio 95.8"*, *"switch the radio to COSMO"*,
+   - *"play radio fritz"*, *"play radio 95.8"*, *"switch the radio to FluxFM"*,
      *"play radio Radio BOB"*: the station by name or frequency, FM or DAB+. Spaces, case and punctuation don't matter (*"radio
-     eins"* finds `radioeins`); an exact match wins over a partial one, so
-     *"Deutschlandfunk"* isn't *"Deutschlandfunk Kultur"*.
+     eins"* finds `radioeins`); an exact match wins over a partial one.
    - *"stop the radio"*, *"turn off the radio"*: `Off`.
 
-   It only sets the dropdown; the FM radio automation plays it, which takes a few
+   It only sets the dropdown; the Radio automation plays it, which takes a few
    seconds (up to a minute for the first DAB+ station). Asking for the station that's already selected goes through `Off` first, so
    it plays again even if it had stopped.
 
    ```yaml
-   alias: FM radio by voice
+   alias: Radio by voice
    mode: queued
    triggers:
      - trigger: conversation
@@ -826,17 +817,17 @@ at a time.
            sequence:
              - action: input_select.select_option
                target:
-                 entity_id: input_select.fm_station
+                 entity_id: input_select.radio_station
                data:
                  option: "Off"
              - set_conversation_response: Radio off
        default:
          - variables:
-             options: "{{ state_attr('input_select.fm_station', 'options')[1:] }}"
+             options: "{{ state_attr('input_select.radio_station', 'options')[1:] }}"
              # The option to play: the last one, or the best match for the spoken name
              target: >-
                {% if trigger.id == 'play' %}
-                 {% set last = states('input_text.fm_last_station') %}
+                 {% set last = states('input_text.radio_last_station') %}
                  {{ last if last in options else '95.8 radioeins' }}
                {% else %}
                  {% set norm = '[^a-z0-9]' %}
@@ -860,27 +851,27 @@ at a time.
            then:
              - set_conversation_response: "I couldn't find a station called {{ trigger.slots.station }}"
              - stop: No matching station
-         # Already selected but maybe not playing: through Off, so FM radio plays it again
+         # Already selected but maybe not playing: through Off, so Radio plays it again
          - if:
              - condition: template
-               value_template: "{{ is_state('input_select.fm_station', target) }}"
+               value_template: "{{ is_state('input_select.radio_station', target) }}"
            then:
              - action: input_select.select_option
                target:
-                 entity_id: input_select.fm_station
+                 entity_id: input_select.radio_station
                data:
                  option: "Off"
              - delay: "00:00:01"
          - action: input_select.select_option
            target:
-             entity_id: input_select.fm_station
+             entity_id: input_select.radio_station
            data:
              option: "{{ target }}"
          - set_conversation_response: "Playing {{ target.split(' ', 1)[1] }}"
    ```
 
 5. **Dashboard** `Music` (`dashboard-music`):
-   - a tile for `input_select.fm_station` with the dropdown (*select options* feature);
+   - a tile for `input_select.radio_station` with the dropdown (*select options* feature);
    - a *Browse music* shortcut card, which opens the media browser for the Echo
      (`/media-browser/media_player.echo`): Music Assistant's library by artists,
      albums, tracks and playlists, played on the Echo;
