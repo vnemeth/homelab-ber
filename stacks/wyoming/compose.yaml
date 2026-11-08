@@ -4,8 +4,9 @@ services:
     # No version-line tag is published, so this is an exact release, updated deliberately
     image: rhasspy/wyoming-whisper:3.8.1
     restart: unless-stopped
-    # small-int8: accurate enough for English commands, about 0.5 GB of memory
-    command: --model small-int8 --language en
+    # medium-int8: small-int8 (about 0.5 GB) misheard words, e.g. "radio" as "video";
+    # medium takes about 1.5 GB of memory and a few seconds longer per command
+    command: --model medium-int8 --language en
     # Only Home Assistant (host network) uses it
     ports:
       - 127.0.0.1:10300:10300

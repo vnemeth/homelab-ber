@@ -790,7 +790,8 @@ at a time.
 
 4. **By voice** ([Voice](#voice)): automation `Radio by voice`, with Assist sentence
    triggers. They take precedence over Home Assistant's built-in sentences.
-   - *"play radio"*, *"turn on the radio"*: the last station (radioeins if none yet).
+   - *"play radio"*, *"turn on the radio"*, *"switch the radio on"*: the last station
+     (radioeins if none yet).
    - *"play radio fritz"*, *"play radio 95.8"*, *"switch the radio to FluxFM"*,
      *"play radio Radio BOB"*: the station by name or frequency, FM or DAB+. Spaces, case and punctuation don't matter (*"radio
      eins"* finds `radioeins`); an exact match wins over a partial one.
@@ -806,7 +807,9 @@ at a time.
    triggers:
      - trigger: conversation
        command:
-         - "(play|start|turn on) [the] radio"
+         - "(play|start) [the] radio"
+         - "(turn|switch) on [the] radio"
+         - "(turn|switch) [the] radio on"
        id: play
      - trigger: conversation
        command:
