@@ -39,8 +39,8 @@ their own regulation and on-device schedule (`auto` mode) aren't used.
 - **Heating season** (a global toggle): when off, VTherm's central mode goes to *Stopped*,
   which switches every VTherm and its valves off, and the heating automations are
   disabled. When on, central mode goes back to *Auto* and everything is applied again.
-- **Per room**, during the heating season: **comfort** while the room's pre-heat toggle
-  is on; otherwise **eco** while its away toggle is on, **comfort** while the schedule is
+- **Per room**, during the heating season: **comfort** while the room's heating override
+  or pre-heat toggle is on; otherwise **eco** while its away toggle is on, **comfort** while the schedule is
   on or someone is home, and **eco** outside it.
 
 Automations and VTherm climate entities that belong to the heating carry the label
@@ -264,20 +264,26 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
    counted by a *Timer* helper, also named `N&V Bedroom pre-heat`
    (`timer.n_v_bedroom_pre_heat`), in the bedroom area, duration `04:00:00`, with
    *Restore* on so it keeps running across Home Assistant restarts.
-4. **Presence:** the Home Assistant Companion app on the phone reports its location;
+4. **Heating override:** *Create helper → Toggle*, named `N&V Bedroom heating override`
+   (`input_boolean.n_v_bedroom_heating_override`), icon `mdi:radiator`, in the bedroom
+   area. Comfort around the clock, whatever away, presence and the schedule say, until
+   it's switched off again; unlike pre-heat, nothing switches it off. Only during the
+   heating season: the season toggle still stops everything.
+5. **Presence:** the Home Assistant Companion app on the phone reports its location;
    under *Settings → People*, assign its device tracker to the person
    (`person.valentin_nemeth`). The app reaches Home Assistant from outside through the
    frpc tunnel. The UI shows the state as *Home*; the actual state is `home`.
-5. **Room presence for VTherm:** *Create helper → Template → Binary sensor*, named
+6. **Room presence for VTherm:** *Create helper → Template → Binary sensor*, named
    `N&V Bedroom presence` (`binary_sensor.n_v_bedroom_presence`), device class
    *Occupancy*, in the bedroom area. It's on whenever the room should be at comfort,
    rather than strictly when someone is there:
    ```
    {{ is_state('person.valentin_nemeth', 'home')
       or is_state('input_boolean.n_v_bedroom_pre_heat', 'on')
+      or is_state('input_boolean.n_v_bedroom_heating_override', 'on')
       or is_state('schedule.n_v_bedroom_heating', 'on') }}
    ```
-6. **VTherm** (type *Thermostat over climate*), named `N&V Bedroom`; then put its device
+7. **VTherm** (type *Thermostat over climate*), named `N&V Bedroom`; then put its device
    in the bedroom area and give `climate.n_v_bedroom` the `heating` label:
    - *Main:* temperature sensor `sensor.n_v_bedroom_climate_sensor_temperature`, cycle
      10 min, use the central configuration and central mode.
@@ -304,7 +310,7 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
    With comfort-away set to the eco temperature, comfort applies only while the
    presence sensor is on, so the preset automation below only has to handle the away
    toggle.
-7. **Preset automation**, with the `heating` label. It also keeps the VTherm on `heat`:
+8. **Preset automation**, with the `heating` label. It also keeps the VTherm on `heat`:
    VTherm comes back up off after a Home Assistant restart or an integration reload,
    and the season automation only switches it on when the season toggle changes. The
    `heating` label disables this automation outside the heating season, so it never
@@ -314,10 +320,10 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
    alias: N&V Bedroom heating preset
    description: >-
      Keeps the VTherm heating, and applies the preset: eco while the away toggle is on
-     (pre-heat overrides it), comfort otherwise. Versatile Thermostat applies comfort
-     only while binary_sensor.n_v_bedroom_presence is on (home, pre-heat or schedule);
-     otherwise its away temperature, which is set to eco. Disabled outside the heating
-     season (heating label).
+     (pre-heat or the heating override overrides it), comfort otherwise. Versatile
+     Thermostat applies comfort only while binary_sensor.n_v_bedroom_presence is on
+     (home, pre-heat, override or schedule); otherwise its away temperature, which is
+     set to eco. Disabled outside the heating season (heating label).
    mode: restart
    triggers:
      # Reapply when automations are saved or reloaded
@@ -327,6 +333,7 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
        entity_id:
          - input_boolean.n_v_bedroom_away
          - input_boolean.n_v_bedroom_pre_heat
+         - input_boolean.n_v_bedroom_heating_override
        to: null
      # Reapply after a Home Assistant restart
      - trigger: homeassistant
@@ -356,6 +363,9 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
          - condition: state
            entity_id: input_boolean.n_v_bedroom_pre_heat
            state: "off"
+         - condition: state
+           entity_id: input_boolean.n_v_bedroom_heating_override
+           state: "off"
        then:
          - action: climate.set_preset_mode
            target:
@@ -370,7 +380,7 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
              preset_mode: comfort
    ```
 
-8. **Ending pre-heat**, without the `heating` label, so the toggle is also reset outside
+9. **Ending pre-heat**, without the `heating` label, so the toggle is also reset outside
    the heating season:
 
    ```yaml
@@ -445,7 +455,7 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
                  entity_id: input_boolean.n_v_bedroom_pre_heat
    ```
 
-9. **Status sensors**, for the dashboard: *Create helper → Template*, then the entity
+10. **Status sensors**, for the dashboard: *Create helper → Template*, then the entity
    type.
    - *Binary sensor* `N&V Bedroom heating active`, device class *Heat*, on while any
      thermostat in the room is heating (the VTherm reports *heating* while its valves
@@ -471,7 +481,8 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
 
 The automatic Overview (areas and summaries) takes no custom cards, so the heating has its
 own dashboard: *Settings → Dashboards → Add dashboard → New dashboard from scratch*,
-`Heating`. Cards are added with the **＋** in a section; Tile cards for the toggles, the
+`Heating`. Cards are added with the **＋** in a section; Tile cards for the toggles
+(pre-heat and override half width side by side), the
 comfort temperature (`input_number.heating_comfort_temperature`, see above), the outdoor
 cold threshold and boost (`input_number.outdoor_cold_threshold`,
 `input_number.outdoor_cold_boost`, half width side by side), the eco
