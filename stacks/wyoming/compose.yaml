@@ -4,11 +4,12 @@ services:
     # No version-line tag is published, so this is an exact release, updated deliberately
     image: rhasspy/wyoming-whisper:3.8.1
     restart: unless-stopped
-    # medium-int8: small-int8 (about 0.5 GB) misheard words, e.g. "radio" as "video";
-    # medium takes about 1.8 GB of memory and a few seconds longer per command.
-    # --beam-size 1 takes the single best guess instead of weighing several (the
-    # default), which is quicker
-    command: --model medium-int8 --language en --beam-size 1
+    # distil-medium.en: small-int8 misheard words, e.g. "radio" as "video", and
+    # medium-int8 heard them but took about 3 s per command. The distilled English-only
+    # medium is meant to be about as accurate and quicker. int8, as the model itself is
+    # float16, which the CPU would run as float32. --beam-size 1 takes the single best
+    # guess instead of weighing several (the default), which is quicker
+    command: --model distil-medium.en --compute-type int8 --language en --beam-size 1
     # Only Home Assistant (host network) uses it
     ports:
       - 127.0.0.1:10300:10300
