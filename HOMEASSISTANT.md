@@ -70,6 +70,17 @@ required section is filled in.
      window counts as open and the room drops to frost (7 °C). It counts as closed once
      the temperature stops falling, or after 30 minutes. Normal cooling in the bedroom
      is about 0.5–1 °C/h; airing it on 4 Nov fell 3 °C in 3 minutes.
+
+     An open window outranks everything else, the heating override included. While it
+     counts as open, the thermostat card shows a target of 7 °C, but the preset may
+     still read *comfort*. Preset and temperature changes are accepted but not applied
+     until the window counts as closed, so changing them doesn't help. Changing the
+     temperature by hand also replaces the preset (it becomes *none*), and that manual
+     temperature is what applies afterwards. To get the preset back, switch the room's
+     override, pre-heat or away toggle, which runs the preset automation again. On
+     10 Nov, airing at 07:25 dropped the bedroom from 21 °C to 19.2 °C in 5 minutes. It
+     stayed at 7 °C until 07:56, the 30-minute limit, although the override was switched
+     on at 07:39.
 3. **Preset temperatures**, on the *Central configuration* device
    (`number.central_configuration_preset_*`):
 
@@ -268,7 +279,9 @@ Area `bedroom`, two TRVs, one VTherm (`climate.n_v_bedroom`).
    (`input_boolean.n_v_bedroom_heating_override`), icon `mdi:radiator`, in the bedroom
    area. Comfort around the clock, whatever away, presence and the schedule say, until
    it's switched off again; unlike pre-heat, nothing switches it off. Only during the
-   heating season: the season toggle still stops everything.
+   heating season: the season toggle still stops everything. A detected open window
+   also wins over it (frost until the window counts as closed, see the window settings
+   under [Versatile Thermostat](#versatile-thermostat)).
 5. **Presence:** the Home Assistant Companion app on the phone reports its location;
    under *Settings → People*, assign its device tracker to the person
    (`person.valentin_nemeth`). The app reaches Home Assistant from outside through the
