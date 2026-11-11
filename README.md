@@ -547,11 +547,11 @@ with authentik, not forward auth.
 
 1. At DreamHost, add the CNAME `beszel.local.ber.nvcode.com` → `lab.local.ber.nvcode.com`.
 2. Create the data directories, and the marker folders through which the agent reports
-   disk usage of the data and Docker volumes:
+   disk usage of the root, data and Docker volumes:
 
    ```bash
    sudo mkdir -p /srv/beszel/data /srv/beszel/socket /srv/beszel/agent
-   sudo mkdir -p /data/.beszel /var/lib/docker/.beszel
+   sudo mkdir -p /.beszel /data/.beszel /var/lib/docker/.beszel
    ```
 
 3. Start only the hub, open `https://beszel.local.ber.nvcode.com` and create the first

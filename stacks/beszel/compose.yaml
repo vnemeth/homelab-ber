@@ -34,10 +34,14 @@ services:
       - /srv/beszel/agent:/var/lib/beszel-agent
       - /srv/beszel/socket:/beszel_socket
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Disk usage of the data and Docker volumes (/ is reported automatically)
+      # Disk usage of the root, data and Docker volumes. The container sees no part of
+      # the root filesystem otherwise, and took the Docker volume (behind its
+      # /etc/hosts) for root, hiding the Docker one; FILESYSTEM below names root
+      - /.beszel:/extra-filesystems/root:ro
       - /data/.beszel:/extra-filesystems/data:ro
       - /var/lib/docker/.beszel:/extra-filesystems/docker:ro
     environment:
+      FILESYSTEM: /extra-filesystems/root
       LISTEN: /beszel_socket/beszel.sock
       HUB_URL: http://localhost:8090
       TOKEN: ${TOKEN}
