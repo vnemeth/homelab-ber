@@ -279,13 +279,21 @@ def start_tuner(station, name):
     return DabTuner(welle, station, name)
 
 
+def station_key(station, name):
+    return station if isinstance(station, float) else (station, normalize(name))
+
+
+def is_retired(key):
+    return retired[0] == key and time.monotonic() < retired[1]
+
+
 def attach(station, name):
     """Returns the tuner and a queue of its audio, or None if the station is
     refused."""
     global tuner, linger_timer, retired
-    key = station if isinstance(station, float) else (station, normalize(name))
+    key = station_key(station, name)
     with lock:
-        if retired[0] == key and time.monotonic() < retired[1]:
+        if is_retired(key):
             return None
         if linger_timer:
             linger_timer.cancel()
@@ -362,13 +370,17 @@ class Handler(BaseHTTPRequestHandler):
         if not (parsed := self.parse_request_path()):
             return
         station, name = parsed
-        attached = attach(station, name)
-        if not attached:
+        if is_retired(station_key(station, name)):
             self.send_error(503, "Just retuned away from this station")
             return
+        # The headers go out before tuning: a DAB+ station can take 20 seconds to
+        # start, and players give up waiting for headers sooner (Music Assistant
+        # after 5 seconds)
+        self.send_stream_headers(name)
+        if not (attached := attach(station, name)):
+            return  # retired in the meantime: the stream ends empty
         this, client = attached
         self.log_message("playing %s %s", station, name)
-        self.send_stream_headers(name)
         try:
             while chunk := client.get():
                 self.wfile.write(chunk)
