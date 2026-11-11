@@ -1,7 +1,7 @@
 services:
   homarr:
     # Homarr publishes no major-version tag, only exact releases: update deliberately
-    image: ghcr.io/homarr-labs/homarr:v2.10.1
+    image: ghcr.io/homarr-labs/homarr:v2.12.0
     restart: unless-stopped
     environment:
       TZ: Europe/Berlin

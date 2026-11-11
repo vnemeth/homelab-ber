@@ -1,6 +1,6 @@
 services:
   homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:2026.10
+    image: ghcr.io/home-assistant/home-assistant:2026.11
     restart: unless-stopped
     # Host networking, so device discovery (mDNS, SSDP) works and frpc reaches it at
     # dockerhost:8123. Traefik reaches it through host.docker.internal.
