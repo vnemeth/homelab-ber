@@ -702,7 +702,9 @@ at a time.
    as the block broadcasts it, ignoring case, spaces and punctuation (the README lists
    them). `Off` stops playback. FM first, sorted like a radio dial, then DAB+ stations
    that aren't on FM, as of November 2026. Only stations that play here; the FM ones
-   that didn't work were removed:
+   that didn't work were removed. rbb 88.8 is on FM too, but 88.8 MHz barely rises
+   above the noise at the dongle (+3 dB, against +20–33 dB for the stations listed), so
+   it's here as DAB+:
 
    ```
    Off
@@ -731,6 +733,7 @@ at a time.
    7B 106.8 pure fm
    7B Star*Sat Radio
    7B JazzRadio Berlin
+   7D rbb 88.8
    12D Radio Paloma
    ```
 
