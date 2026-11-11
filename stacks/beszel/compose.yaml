@@ -38,8 +38,9 @@ services:
       # the root filesystem otherwise, and took the Docker volume (behind its
       # /etc/hosts) for root, hiding the Docker one; FILESYSTEM below names root
       - /.beszel:/extra-filesystems/root:ro
-      - /data/.beszel:/extra-filesystems/data:ro
-      - /var/lib/docker/.beszel:/extra-filesystems/docker:ro
+      # <device>__<name>: Beszel shows the name after "__" instead of dm-1, dm-2
+      - /data/.beszel:/extra-filesystems/vg0-data__data:ro
+      - /var/lib/docker/.beszel:/extra-filesystems/vg0-docker__docker:ro
     environment:
       FILESYSTEM: /extra-filesystems/root
       LISTEN: /beszel_socket/beszel.sock
