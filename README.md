@@ -44,7 +44,9 @@ full-disk encryption, so the server comes back up unattended after a power cut.
   folder is Dockge's stacks directory, lives here too.
 - **`/var/lib/docker`** holds images, container layers and logs, which can all be
   re-downloaded. Keeping them on their own volume means they can't fill up the OS.
-  `docker system prune` frees space here.
+  `docker system prune` frees space here. Docker 29 keeps images and layers in
+  containerd's store, by default `/var/lib/containerd` on the root volume; it's moved
+  here, to `/var/lib/docker/containerd` ([step 26](#26-move-containerds-image-store-to-the-docker-volume)).
 - **`/srv`** holds persistent service data. Each stack bind-mounts `/srv/<stack>/`.
 - **`/home`** shares space with `/srv`, so large files in the home directory don't eat
   into the OS volume.
@@ -1139,3 +1141,41 @@ Flashing ESPHome replaces it.
    *Discovered*. Adding it asks for `api_encryption_key`. The Assist pipeline it uses
    is in `HOMEASSISTANT.md`.
 
+### 26. Move containerd's image store to the Docker volume
+
+Docker 29 stores images and container layers through containerd, whose store is
+`/var/lib/containerd` on the root volume, not `/var/lib/docker`. It had grown to 23 GB
+there (root 77 % full) while the Docker volume stayed almost empty. containerd's
+`root` setting moves it.
+
+All containers stop while it's copied, so do it from the home network rather than
+through Tailscale, inside `tmux` or `screen`:
+
+```bash
+sudo systemctl stop docker.socket docker containerd
+# -HAX keeps the hard links, ACLs and extended attributes the overlay layers rely on
+sudo rsync -aHAX --numeric-ids /var/lib/containerd/ /var/lib/docker/containerd/
+sudo mv /var/lib/containerd /var/lib/containerd.old
+```
+
+Add at the top of `/etc/containerd/config.toml`, above `disabled_plugins = ["cri"]`:
+
+```toml
+root = "/var/lib/docker/containerd"
+```
+
+```bash
+sudo systemctl start containerd docker
+```
+
+Check:
+
+```bash
+containerd config dump | grep '^root'   # root = '/var/lib/docker/containerd'
+docker ps                               # every container up again
+df -h /var/lib/docker                   # the store is here now
+```
+
+Once everything runs normally, delete the old store: `sudo rm -rf /var/lib/containerd.old`.
+To go back instead, stop containerd and Docker, remove the `root` line, and move
+`/var/lib/containerd.old` back to `/var/lib/containerd`.
