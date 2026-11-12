@@ -68,6 +68,9 @@ Configuration for a single-node homelab in Berlin:
   `.env.example`, with a placeholder value (e.g. `changeme`) and a short comment where the
   purpose isn't obvious.
 - Keep `.env.example` in sync when adding, renaming, or removing variables.
+- The Home Assistant MCP server is set up in `.mcp.json`. Its URL contains a secret path,
+  so it is read from the `HOMELAB_BER_HA_MCP_URL` environment variable, which must be set
+  in the shell that starts the agent. Never print or commit the URL.
 
 ## Working style
 
